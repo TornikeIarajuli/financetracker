@@ -13,6 +13,7 @@ import {
 import { format, subMonths, isSameMonth } from 'date-fns';
 import { ka } from 'date-fns/locale';
 import { parseDate } from '../utils/dates';
+import { formatGoalAmount, summarizeGoals, formatTotals, currencyOf } from '../utils/currency';
 import {
   monthlyStats, spendingByCategory, yearCategoryTotals, stackedCategoryData,
   quarterlySummary as buildQuarterlySummary, categoryMonthlyTrend, yearsWithData,
@@ -122,11 +123,7 @@ function Dashboard() {
     () => yearCategoryTotals(allTransactions, categoriesData, viewYear),
     [allTransactions, categoriesData, viewYear]
   );
-  const savingsStats = useMemo(() => {
-    const total = savingsGoalsList.reduce((s, g) => s + (g.currentAmount || 0), 0);
-    const target = savingsGoalsList.reduce((s, g) => s + (g.targetAmount || 0), 0);
-    return { total, goalCount: savingsGoalsList.length, progress: target > 0 ? Math.round((total / target) * 100) : 0 };
-  }, [savingsGoalsList]);
+  const savingsStats = useMemo(() => summarizeGoals(savingsGoalsList), [savingsGoalsList]);
 
   const handleAddSavings = async (e) => {
     e.preventDefault();
@@ -248,7 +245,7 @@ function Dashboard() {
           <div className="db-stat-icon">🎯</div>
           <div className="db-stat-body">
             <span className="db-stat-label">დანაზოგი</span>
-            <span className="db-stat-value">{formatCurrency(savingsStats.total)}</span>
+            <span className="db-stat-value">{formatTotals(savingsStats.totals)}</span>
             {savingsStats.goalCount > 0 && (
               <span className="db-stat-sub">{savingsStats.goalCount} მიზანი · {savingsStats.progress}%</span>
             )}
@@ -575,7 +572,7 @@ function Dashboard() {
                       <span className="db-goal-icon">{goal.icon}</span>
                       <div className="db-goal-info">
                         <span className="db-goal-name">{goal.name}</span>
-                        <span className="db-goal-amounts">{formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}</span>
+                        <span className="db-goal-amounts">{formatGoalAmount(goal.currentAmount, goal.currency)} / {formatGoalAmount(goal.targetAmount, goal.currency)}</span>
                       </div>
                       <span className="db-goal-pct">{pct}%</span>
                     </div>
@@ -588,7 +585,7 @@ function Dashboard() {
             </div>
           ) : (
             <div className="empty-state-sm">
-              <Link to="/savings" className="view-all-link">+ შექმენი პირველი მიზანი</Link>
+              <Link to="/goals?tab=savings" className="view-all-link">+ შექმენი პირველი მიზანი</Link>
             </div>
           )}
         </div>
@@ -606,13 +603,13 @@ function Dashboard() {
                   <option value="">აირჩიეთ მიზანი</option>
                   {savingsGoalsList.map(goal => (
                     <option key={goal.id} value={goal.id}>
-                      {goal.icon} {goal.name} ({formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)})
+                      {goal.icon} {goal.name} ({formatGoalAmount(goal.currentAmount, goal.currency)} / {formatGoalAmount(goal.targetAmount, goal.currency)})
                     </option>
                   ))}
                 </select>
               </div>
               <div className="form-group">
-                <label>თანხა</label>
+                <label>თანხა ({currencyOf(savingsGoalsList.find(g => g.id === selectedSavingsGoal)?.currency || 'GEL').symbol})</label>
                 <input
                   type="number"
                   value={addSavingsAmount}

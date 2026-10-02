@@ -10,7 +10,8 @@ Personal finance tracker app in Georgian (React + Vite).
 - PWA with service worker (vite-plugin-pwa)
 
 ## Project Structure
-- `src/pages/` — Dashboard, Transactions, Reports, Wishlist; `src/components/SavingsGoals.jsx`
+- `src/pages/` — Dashboard, Transactions, Reports, Goals (tabs: `components/SavingsGoals.jsx` + `pages/Wishlist.jsx`; `/savings` and `/wishlist` redirect to `/goals?tab=…`)
+- `src/utils/currency.js` — savings goals keep their own currency; always format with `formatGoalAmount`, never `formatCurrency` (₾)
 - `src/store/db.js` — all IndexedDB operations + cloud sync (single source of truth)
 - `src/store/syncMerge.js` — merge rules; **identical copy in `../finance-app/src/store/syncMerge.js`** (the Expo mobile app writes the same cloud row) — change both together
 - `src/store/supabase.js` — Supabase client, email/password auth, row read/write

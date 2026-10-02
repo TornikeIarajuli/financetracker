@@ -6601,3 +6601,33 @@ input:focus, select:focus, textarea:focus {
   background: rgba(34, 197, 94, 0.08);
   border-color: rgba(34, 197, 94, 0.35);
 }
+
+/* Add-category dialog: grids wrap to the dialog width instead of overflowing */
+.de-modal {
+  max-width: 440px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.de-emoji-grid {
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+}
+
+.de-emoji-btn {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+.de-restore-list {
+  max-height: 140px;
+  padding: 2px;
+}
+
+/* Goals page (savings + wishlist tabs) */
+.goals-tabs {
+  margin: 0 0 1rem;
+}

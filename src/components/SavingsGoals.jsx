@@ -1,26 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getSavingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal, addToSavingsGoal } from '../store/db';
 import { parseDate } from '../utils/dates';
+import { CURRENCIES, formatGoalAmount } from '../utils/currency';
 
 const GOAL_ICONS = ['🎯', '🏠', '🚗', '✈️', '💻', '📱', '🎮', '💍', '🎓', '💰', '🏦', '🎁'];
-
-const CURRENCIES = [
-  { code: 'GEL', symbol: '₾', name: 'ლარი' },
-  { code: 'USD', symbol: '$', name: 'დოლარი' },
-  { code: 'EUR', symbol: '€', name: 'ევრო' },
-  { code: 'GBP', symbol: '£', name: 'ფუნტი' },
-  { code: 'TRY', symbol: '₺', name: 'ლირა' },
-];
-
-const formatGoalAmount = (amount, currencyCode = 'GEL') => {
-  const curr = CURRENCIES.find(c => c.code === currencyCode) || CURRENCIES[0];
-  const formatted = new Intl.NumberFormat('ka-GE', {
-    style: 'decimal',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-  return `${formatted} ${curr.symbol}`;
-};
 
 export default function SavingsGoals() {
   const [goals, setGoals] = useState([]);

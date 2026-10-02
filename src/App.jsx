@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Routes, Route, NavLink, Link } from 'react-router-dom';
+import { Routes, Route, NavLink, Link, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import LoginScreen from './components/LoginScreen';
 import { useTheme } from './store/ThemeContext';
@@ -9,9 +9,8 @@ import './App.css';
 
 // Secondary pages load on demand to keep the first bundle small.
 const Transactions = lazy(() => import('./pages/Transactions'));
-const Wishlist = lazy(() => import('./pages/Wishlist'));
 const Reports = lazy(() => import('./pages/Reports'));
-const SavingsGoals = lazy(() => import('./components/SavingsGoals'));
+const Goals = lazy(() => import('./pages/Goals'));
 
 const SYNC_TITLES = {
   syncing: 'სინქრონიზაცია...',
@@ -100,15 +99,9 @@ function App() {
             </NavLink>
           </li>
           <li>
-            <NavLink to="/wishlist" className={({ isActive }) => isActive ? 'active' : ''}>
-              <span className="nav-icon">⭐</span>
-              <span className="nav-label">სურვილები</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/savings" className={({ isActive }) => isActive ? 'active' : ''}>
+            <NavLink to="/goals" className={({ isActive }) => isActive ? 'active' : ''}>
               <span className="nav-icon">🎯</span>
-              <span className="nav-label">დანაზოგი</span>
+              <span className="nav-label">მიზნები</span>
             </NavLink>
           </li>
           <li>
@@ -136,8 +129,10 @@ function App() {
           <Routes key={dataVersion}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/transactions" element={<Transactions />} />
-            <Route path="/wishlist" element={<Wishlist />} />
-            <Route path="/savings" element={<SavingsGoals />} />
+            <Route path="/goals" element={<Goals />} />
+            {/* old addresses keep working */}
+            <Route path="/wishlist" element={<Navigate to="/goals?tab=wishlist" replace />} />
+            <Route path="/savings" element={<Navigate to="/goals?tab=savings" replace />} />
             <Route path="/reports" element={<Reports />} />
           </Routes>
         </Suspense>
