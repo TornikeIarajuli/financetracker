@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { getSavingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal, addToSavingsGoal } from '../store/db';
 import { parseDate } from '../utils/dates';
 import { CURRENCIES, formatGoalAmount } from '../utils/currency';
+import Icon from './Icon';
 
-const GOAL_ICONS = ['🎯', '🏠', '🚗', '✈️', '💻', '📱', '🎮', '💍', '🎓', '💰', '🏦', '🎁'];
+const GOAL_ICONS = ['🎯', '🏠', '🚗', '✈️', '💻', '📱', '🎮', '💍', '🎓', '💰', '🏦', '🎁', '🏖️', '💎'];
 
 export default function SavingsGoals() {
   const [goals, setGoals] = useState([]);
@@ -132,7 +133,7 @@ export default function SavingsGoals() {
   return (
     <div className="savings-goals-widget">
       <div className="sg-header">
-        <h3>🎯 დანაზოგის მიზნები</h3>
+        <h3><Icon e="🎯" size={22} color="#ec4899" /> დანაზოგის მიზნები</h3>
         <button className="sg-add-btn" onClick={() => { resetForm(); setEditingGoal(null); setShowModal(true); }}>
           + დამატება
         </button>
@@ -155,7 +156,7 @@ export default function SavingsGoals() {
               <div key={goal.id} className={`sg-goal-card ${isComplete ? 'complete' : ''}`}>
                 <div className="sg-goal-header">
                   <span className="sg-goal-icon" style={{ backgroundColor: goal.color + '20' }}>
-                    {goal.icon}
+                    <Icon e={goal.icon} size={26} color={goal.color} />
                   </span>
                   <div className="sg-goal-info">
                     <span className="sg-goal-name">{goal.name}</span>
@@ -170,8 +171,8 @@ export default function SavingsGoals() {
                     {!isComplete && (
                       <button className="sg-action-btn add" onClick={() => handleAddFunds(goal)} title="თანხის დამატება">+</button>
                     )}
-                    <button className="sg-action-btn edit" onClick={() => handleEdit(goal)} title="რედაქტირება">✏️</button>
-                    <button className="sg-action-btn delete" onClick={() => handleDelete(goal.id)} title="წაშლა">🗑️</button>
+                    <button className="sg-action-btn edit" onClick={() => handleEdit(goal)} title="რედაქტირება"><Icon e="✏️" size={16} /></button>
+                    <button className="sg-action-btn delete" onClick={() => handleDelete(goal.id)} title="წაშლა"><Icon e="🗑️" size={16} /></button>
                   </div>
                 </div>
                 <div className="sg-progress-bar">
@@ -270,7 +271,7 @@ export default function SavingsGoals() {
                       className={`sg-icon-btn ${formData.icon === icon ? 'selected' : ''}`}
                       onClick={() => setFormData({ ...formData, icon })}
                     >
-                      {icon}
+                      <Icon e={icon} size={22} color={formData.color} />
                     </button>
                   ))}
                 </div>
@@ -300,7 +301,7 @@ export default function SavingsGoals() {
         <div className="sg-modal-overlay" onClick={() => setShowAddFundsModal(false)}>
           <div className="sg-modal small" onClick={e => e.stopPropagation()}>
             <h3>თანხის დამატება</h3>
-            <p className="sg-modal-subtitle">{selectedGoal.icon} {selectedGoal.name}</p>
+            <p className="sg-modal-subtitle"><Icon e={selectedGoal.icon} size={18} color={selectedGoal.color} /> {selectedGoal.name}</p>
             <form onSubmit={submitAddFunds}>
               <div className="sg-form-group">
                 <label>

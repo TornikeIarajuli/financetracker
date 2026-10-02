@@ -6,6 +6,7 @@ import { useTheme } from './store/ThemeContext';
 import { startupCloudSync, getSyncStatus, onSyncStatus, DATA_CHANGED_EVENT, triggerAutoSync } from './store/db';
 import { isSupabaseConfigured, isRemembered, onAuthChange } from './store/supabase';
 import './App.css';
+import Icon from './components/Icon';
 
 // Secondary pages load on demand to keep the first bundle small.
 const Transactions = lazy(() => import('./pages/Transactions'));
@@ -73,7 +74,7 @@ function App() {
   if (authState === 'checking') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '12px', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-        <span style={{ fontSize: '2rem' }}>☁️</span>
+        <Icon e="☁️" size={40} color="var(--primary)" />
         სინქრონიზაცია...
       </div>
     );
@@ -88,38 +89,38 @@ function App() {
         <ul className="nav-links">
           <li>
             <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} end>
-              <span className="nav-icon">📊</span>
+              <span className="nav-icon"><Icon e="📊" size={22} color="#3b82f6" /></span>
               <span className="nav-label">მთავარი</span>
             </NavLink>
           </li>
           <li>
             <NavLink to="/transactions" className={({ isActive }) => isActive ? 'active' : ''}>
-              <span className="nav-icon">💳</span>
+              <span className="nav-icon"><Icon e="💳" size={22} color="#f97316" /></span>
               <span className="nav-label">ხარჯი</span>
             </NavLink>
           </li>
           <li>
             <NavLink to="/goals" className={({ isActive }) => isActive ? 'active' : ''}>
-              <span className="nav-icon">🎯</span>
+              <span className="nav-icon"><Icon e="🎯" size={22} color="#ec4899" /></span>
               <span className="nav-label">მიზნები</span>
             </NavLink>
           </li>
           <li>
             <NavLink to="/reports" className={({ isActive }) => isActive ? 'active' : ''}>
-              <span className="nav-icon">📈</span>
+              <span className="nav-icon"><Icon e="📈" size={22} color="#22c55e" /></span>
               <span className="nav-label">ანგარიში</span>
             </NavLink>
           </li>
         </ul>
         <div className="sidebar-footer">
           <button className="theme-toggle" onClick={toggleTheme} title={isDark ? 'ნათელი თემა' : 'მუქი თემა'}>
-            <span className="theme-icon">{isDark ? '☀️' : '🌙'}</span>
+            <span className="theme-icon"><Icon e={isDark ? '☀️' : '🌙'} size={20} color={isDark ? '#f59e0b' : '#6366f1'} /></span>
             <span className="theme-label">{isDark ? 'ნათელი' : 'მუქი'}</span>
           </button>
           {syncStatus.state !== 'off' && (
             <Link to="/reports" className="sync-indicator" title={SYNC_TITLES[syncStatus.state] || ''}>
               <span className={`sync-dot ${syncStatus.state === 'synced' ? 'synced' : ''} ${syncStatus.state === 'error' ? 'error' : ''}`} />
-              ☁️
+              <Icon e="☁️" size={18} />
             </Link>
           )}
         </div>

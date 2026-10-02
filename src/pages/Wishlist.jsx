@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getWishlist, addWishlistItem, updateWishlistItem, deleteWishlistItem, formatCurrency } from '../store/db';
 import { formatDate } from '../utils/dates';
+import Icon from '../components/Icon';
 
 // Only open http(s) links; anything else (e.g. javascript:) is not rendered.
 const safeUrl = (url) => (/^https?:\/\//i.test(url || '') ? url : null);
@@ -221,10 +222,10 @@ function Wishlist() {
 
               <div className="wishlist-actions">
                 <button className="btn btn-icon" onClick={() => handleEdit(item)} title="რედაქტირება">
-                  ✏️
+                  <Icon e="✏️" size={16} />
                 </button>
                 <button className="btn btn-icon btn-danger" onClick={() => handleDelete(item.id)} title="წაშლა">
-                  🗑️
+                  <Icon e="🗑️" size={16} />
                 </button>
               </div>
             </div>

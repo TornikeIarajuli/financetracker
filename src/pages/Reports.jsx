@@ -13,6 +13,7 @@ import { isSupabaseConfigured, isSignedIn, getUserEmail, onAuthChange, signOut }
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ka } from 'date-fns/locale';
 import { inRange } from '../utils/dates';
+import Icon from '../components/Icon';
 import {
   totalsOf, yearsWithData, yearCategoryTotals, stackedCategoryData,
   savingsCategoryIds, isSavingsCategory, markPartialLast,
@@ -183,9 +184,9 @@ function Reports() {
     const result = await syncNow();
     if (result.success) {
       await loadData();
-      setSyncMsg('✅ სინქრონიზებულია');
+      setSyncMsg({ ok: true, text: 'სინქრონიზებულია' });
     } else {
-      setSyncMsg(`❌ შეცდომა: ${result.error}`);
+      setSyncMsg({ ok: false, text: `შეცდომა: ${result.error}` });
     }
   };
 
@@ -202,7 +203,7 @@ function Reports() {
       let moved = 0;
       for (const src of sources) moved += (await mergeCategories(src.id, target.id)).moved;
       await loadData();
-      setSyncMsg(`✅ „${target.name}“ გაერთიანდა — გადავიდა ${moved} ჩანაწერი.`);
+      setSyncMsg({ ok: true, text: `„${target.name}“ გაერთიანდა — გადავიდა ${moved} ჩანაწერი.` });
     } catch (err) {
       alert(`გაერთიანება ვერ მოხერხდა: ${err.message}`);
     } finally {
@@ -215,7 +216,7 @@ function Reports() {
     if (!confirm(`გავაუქმოთ „${cat.name}“-ის გაერთიანება? მისი ჩანაწერები ისევ ცალკე კატეგორიაში დაბრუნდება.`)) return;
     const { moved } = await unmergeCategory(cat.id);
     await loadData();
-    setSyncMsg(`↩️ გაერთიანება გაუქმდა — დაბრუნდა ${moved} ჩანაწერი.`);
+    setSyncMsg({ ok: true, text: `გაერთიანება გაუქმდა — დაბრუნდა ${moved} ჩანაწერი.` });
   };
 
   // ── Computed values ───────────────────────────────────────────
@@ -416,7 +417,7 @@ function Reports() {
               <select className="filter-select" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
                 <option value="">აირჩიეთ კატეგორია...</option>
                 {categories.expense?.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
             </div>
@@ -611,7 +612,7 @@ function Reports() {
       {reportType === 'data' && (
         <div className="report-content">
           <div className={`data-section ${signedIn ? 'cloud-enabled' : ''}`} style={{ borderLeft: signedIn ? '4px solid #3b82f6' : undefined }}>
-            <h3>☁️ ღრუბლოვანი სინქრონიზაცია</h3>
+            <h3><Icon e="☁️" size={22} color="#3b82f6" /> ღრუბლოვანი სინქრონიზაცია</h3>
             {!isSupabaseConfigured() ? (
               <p>ღრუბლოვანი სინქრონიზაცია არ არის კონფიგურირებული.</p>
             ) : signedIn ? (
@@ -625,16 +626,16 @@ function Reports() {
                   ჩანაწერი ქრება მხოლოდ მაშინ, როცა თქვენ წაშლით.
                 </p>
                 {syncStatus.state === 'error' && !syncMsg && (
-                  <p style={{ color: '#ef4444', fontWeight: 600 }}>❌ {syncStatus.error}</p>
+                  <p style={{ color: '#ef4444', fontWeight: 600 }}><Icon e="❌" size={16} /> {syncStatus.error}</p>
                 )}
                 {syncMsg && (
-                  <p style={{ fontWeight: 600, margin: '0.5rem 0', color: syncMsg.startsWith('✅') ? '#22c55e' : '#ef4444' }}>
-                    {syncMsg}
+                  <p style={{ fontWeight: 600, margin: '0.5rem 0', color: syncMsg.ok ? '#22c55e' : '#ef4444' }}>
+                    <Icon e={syncMsg.ok ? '✅' : '❌'} size={16} /> {syncMsg.text}
                   </p>
                 )}
                 <div className="btn-group">
                   <button className="btn btn-primary" onClick={handleSync} disabled={syncStatus.state === 'syncing'}>
-                    {syncStatus.state === 'syncing' ? '⏳ ...' : '🔄 სინქრონიზაცია ახლა'}
+                    {syncStatus.state === 'syncing' ? '...' : <><Icon e="🔄" size={16} /> სინქრონიზაცია ახლა</>}
                   </button>
                   <button className="btn btn-secondary" onClick={handleSignOut}>გასვლა</button>
                 </div>
@@ -655,7 +656,7 @@ function Reports() {
 
           {(duplicates.length > 0 || mergedCats.length > 0) && (
             <div className="data-section" style={{ borderLeft: '4px solid #f59e0b' }}>
-              <h3>🔀 ერთნაირი სახელის კატეგორიები</h3>
+              <h3><Icon e="🔀" size={22} color="#f59e0b" /> ერთნაირი სახელის კატეგორიები</h3>
               {duplicates.length > 0 && (
                 <p>
                   ეს კატეგორიები ერთნაირად ჰქვია, ამიტომ გრაფიკებში ორჯერ ჩანს. გაერთიანებისას ჩანაწერები
@@ -667,7 +668,7 @@ function Reports() {
                   <div className="dup-items">
                     {group.map((c, i) => (
                       <span key={c.id} className={`dup-chip ${i === 0 ? 'keep' : ''}`}>
-                        {c.icon} {c.name} · {c.txCount} ჩანაწერი{i === 0 ? ' (დარჩება)' : ''}
+                        <Icon e={c.icon} size={16} color={c.color} /> {c.name} · {c.txCount} ჩანაწერი{i === 0 ? ' (დარჩება)' : ''}
                       </span>
                     ))}
                   </div>
@@ -679,8 +680,8 @@ function Reports() {
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>გაერთიანებული:</p>
                   {mergedCats.map(c => (
                     <div key={c.id} className="dup-group">
-                      <span className="dup-chip">{c.icon} {c.name}</span>
-                      <button className="btn btn-secondary" onClick={() => handleUnmerge(c)}>↩️ გაუქმება</button>
+                      <span className="dup-chip"><Icon e={c.icon} size={16} color={c.color} /> {c.name}</span>
+                      <button className="btn btn-secondary" onClick={() => handleUnmerge(c)}><Icon e="↩️" size={16} /> გაუქმება</button>
                     </div>
                   ))}
                 </div>
@@ -691,23 +692,23 @@ function Reports() {
           {pendingMerge && (
             <div className="de-modal-overlay" onClick={() => !mergeBusy && setPendingMerge(null)}>
               <div className="de-modal de-confirm" role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}>
-                <h3>🔀 „{pendingMerge.group[0].name}“ — გაერთიანება</h3>
+                <h3><Icon e="🔀" size={20} color="#f59e0b" /> „{pendingMerge.group[0].name}“ — გაერთიანება</h3>
                 <p className="de-confirm-text">
                   {pendingMerge.group.slice(1).reduce((s, c) => s + c.txCount, 0)} ჩანაწერი გადავა კატეგორიაში
-                  „{pendingMerge.group[0].icon} {pendingMerge.group[0].name}“ ({pendingMerge.group[0].txCount} ჩანაწერი).
+                  „{pendingMerge.group[0].name}“ ({pendingMerge.group[0].txCount} ჩანაწერი).
                   ჩანაწერები და თანხები არ შეიცვლება, მხოლოდ კატეგორია. მეორე კატეგორია დაარქივდება (არ წაიშლება).
                   ყოველთვის შეგიძლიათ გააუქმოთ.
                 </p>
                 <div className="de-modal-actions">
                   <button className="de-btn secondary" onClick={() => setPendingMerge(null)} disabled={mergeBusy} autoFocus>გაუქმება</button>
-                  <button className="de-btn primary" onClick={runMerge} disabled={mergeBusy}>{mergeBusy ? '⏳ ...' : 'გაერთიანება'}</button>
+                  <button className="de-btn primary" onClick={runMerge} disabled={mergeBusy}>{mergeBusy ? '...' : 'გაერთიანება'}</button>
                 </div>
               </div>
             </div>
           )}
 
           <div className="data-section" style={{ borderLeft: '4px solid #22c55e' }}>
-            <h3>🛡️ სარეზერვო ასლი (ავტომატური)</h3>
+            <h3><Icon e="🛡️" size={22} color="#22c55e" /> სარეზერვო ასლი (ავტომატური)</h3>
             {(() => {
               const info = getBackupInfo();
               return info ? (
@@ -718,9 +719,9 @@ function Reports() {
             })()}
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>აღდგენა ამატებს მხოლოდ დაკარგულ ჩანაწერებს — არსებულს არაფერს ცვლის.</p>
             <div className="btn-group">
-              <button className="btn btn-primary" onClick={handleRestoreBackup}>♻️ სარეზერვო ასლიდან აღდგენა</button>
+              <button className="btn btn-primary" onClick={handleRestoreBackup}><Icon e="♻️" size={16} /> სარეზერვო ასლიდან აღდგენა</button>
               {getPreSyncSnapshot() && (
-                <button className="btn btn-secondary" onClick={handleRestoreSnapshot}>⏪ სინქრონიზაციამდე მდგომარეობიდან აღდგენა</button>
+                <button className="btn btn-secondary" onClick={handleRestoreSnapshot}><Icon e="⏪" size={16} /> სინქრონიზაციამდე მდგომარეობიდან აღდგენა</button>
               )}
             </div>
           </div>
@@ -728,14 +729,14 @@ function Reports() {
           <div className="data-section">
             <h3>მონაცემების ექსპორტი</h3>
             <p>ჩამოტვირთეთ თქვენი ფინანსური მონაცემები JSON ფაილის სახით სარეზერვო ასლისთვის.</p>
-            <button className="btn btn-primary" onClick={handleExport}>📥 ექსპორტი</button>
+            <button className="btn btn-primary" onClick={handleExport}><Icon e="📥" size={16} /> ექსპორტი</button>
           </div>
 
           <div className="data-section">
             <h3>მონაცემების იმპორტი</h3>
             <p>იმპორტირეთ მონაცემები ადრე ექსპორტირებული JSON ფაილიდან. დაემატება მხოლოდ ახალი ჩანაწერები.</p>
             <label className="btn btn-secondary file-input-label">
-              📤 იმპორტი
+              <Icon e="📤" size={16} /> იმპორტი
               <input type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
             </label>
           </div>

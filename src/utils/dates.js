@@ -24,7 +24,7 @@ export const toDateStr = (date) => format(date, 'yyyy-MM-dd');
 // malformed, so one bad record cannot crash a whole page.
 export const formatDate = (value, pattern) => {
   const d = parseDate(value);
-  return d ? format(d, pattern, { locale: ka }) : `⚠️ ${value ?? '—'}`;
+  return d ? format(d, pattern, { locale: ka }) : `(!) ${value ?? '—'}`;
 };
 
 export const inMonth = (t, year, month) => {

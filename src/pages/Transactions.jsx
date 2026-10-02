@@ -22,6 +22,8 @@ import {
 import { format, subDays, addDays } from 'date-fns';
 import { ka } from 'date-fns/locale';
 import { parseDate, formatDate, inMonth, isValidDate } from '../utils/dates';
+import Icon from '../components/Icon';
+import { PICKER_EMOJIS } from '../components/icons.generated';
 
 const HISTORY_PAGE = 50;
 
@@ -164,7 +166,8 @@ function Transactions() {
   };
 
   const handleCopyPrevBudgets = () => setPendingAction({
-    title: '📋 ბიუჯეტების გადმოკოპირება',
+    icon: '📋',
+    title: 'ბიუჯეტების გადმოკოპირება',
     message: 'წინა თვის ბიუჯეტები გადმოვა ამ თვეში. ბიუჯეტები, რომლებიც ამ თვეში უკვე დაყენებულია, არ შეიცვლება.',
     confirmLabel: 'გადმოკოპირება',
     run: async () => {
@@ -268,7 +271,7 @@ function Transactions() {
         await loadData();
         resetForm();
         const total = transactionsToAdd.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-        setSavedToast(`✅ შენახულია: ${transactionsToAdd.length} ჩანაწერი${total ? ` · ${formatCurrency(total)}` : ''}`);
+        setSavedToast(`შენახულია: ${transactionsToAdd.length} ჩანაწერი${total ? ` · ${formatCurrency(total)}` : ''}`);
         setTimeout(() => setSavedToast(null), 3000);
       }
     } catch (err) {
@@ -325,7 +328,8 @@ function Transactions() {
   };
 
   const handleTrimCategories = () => setPendingAction({
-    title: '🧹 გამოუყენებელი კატეგორიების მოხსნა',
+    icon: '🧹',
+    title: 'გამოუყენებელი კატეგორიების მოხსნა',
     message: 'ამ თვის სიაში დარჩება მხოლოდ კატეგორიები, რომლებიც წინა ან ამ თვეში გამოიყენეთ. ჩანაწერები და კატეგორიები არ წაიშლება — საჭიროებისას „+ დამატება“-დან დააბრუნებთ.',
     confirmLabel: 'მოხსნა',
     run: async () => {
@@ -342,7 +346,8 @@ function Transactions() {
   };
 
   const handleResetCategories = () => setPendingAction({
-    title: '🔄 კატეგორიების გადატვირთვა',
+    icon: '🔄',
+    title: 'კატეგორიების გადატვირთვა',
     message: 'ამ თვის კატეგორიების სია შეიცვლება ნაგულისხმევი სიით. ჩანაწერები და კატეგორიები არ წაიშლება — მოხსნილ კატეგორიებს „+ დამატება“-დან დააბრუნებთ.',
     confirmLabel: 'გადატვირთვა',
     danger: true,
@@ -564,13 +569,13 @@ function Transactions() {
       {overBudgetCategories.length > 0 && (
         <div className="de-budget-alerts">
           <div className="de-alerts-header">
-            <span className="de-alerts-icon">⚠️</span>
+            <span className="de-alerts-icon"><Icon e="⚠️" size={20} color="#ef4444" /></span>
             <span className="de-alerts-title">ბიუჯეტი გადაჭარბებულია!</span>
           </div>
           <div className="de-alerts-list">
             {overBudgetCategories.map(cat => (
               <div key={cat.id} className="de-alert-item">
-                <span className="de-alert-icon">{cat.icon}</span>
+                <span className="de-alert-icon"><Icon e={cat.icon} size={18} color={cat.color} /></span>
                 <span className="de-alert-name">{cat.name}</span>
                 <span className="de-alert-over">+{formatCurrency(cat.over)}</span>
               </div>
@@ -590,9 +595,9 @@ function Transactions() {
               })()}
             </h4>
             <div className="de-header-actions">
-              <button className="de-reset-btn" onClick={handleCopyPrevBudgets} title="ბიუჯეტების გადმოკოპირება წინა თვიდან">📋</button>
-              <button className="de-reset-btn" onClick={handleTrimCategories} title="დატოვე მხოლოდ წინა/ამ თვეში გამოყენებული კატეგორიები">🧹</button>
-              <button className="de-reset-btn" onClick={handleResetCategories} title="კატეგორიების გადატვირთვა">🔄</button>
+              <button className="de-reset-btn" onClick={handleCopyPrevBudgets} title="ბიუჯეტების გადმოკოპირება წინა თვიდან"><Icon e="📋" size={18} color="#3b82f6" /></button>
+              <button className="de-reset-btn" onClick={handleTrimCategories} title="დატოვე მხოლოდ წინა/ამ თვეში გამოყენებული კატეგორიები"><Icon e="🧹" size={18} color="#ec4899" /></button>
+              <button className="de-reset-btn" onClick={handleResetCategories} title="კატეგორიების გადატვირთვა"><Icon e="🔄" size={18} color="#22c55e" /></button>
               <button className="de-add-btn" onClick={() => setShowAddCategory(true)}>+ დამატება</button>
             </div>
           </div>
@@ -602,7 +607,7 @@ function Transactions() {
           <form onSubmit={handleBulkSubmit} className="de-quick-list">
             {/* Income */}
             <label className={`de-quick-row income ${parseAmount(bulkIncome) ? 'has-value' : ''}`}>
-              <span className="de-quick-icon">💼</span>
+              <span className="de-quick-icon"><Icon e="💼" size={22} color="#16a34a" /></span>
               <span className="de-quick-main">
                 <span className="de-quick-name">შემოსავალი</span>
               </span>
@@ -645,13 +650,13 @@ function Transactions() {
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, cat)}
                 >
-                  <span className="de-quick-icon" style={{ backgroundColor: cat.color + '25' }} title="გადაათრიე რიგის შესაცვლელად">{cat.icon}</span>
+                  <span className="de-quick-icon" style={{ backgroundColor: cat.color + '25' }} title="გადაათრიე რიგის შესაცვლელად"><Icon e={cat.icon} size={22} color={cat.color} /></span>
                   <span className="de-quick-main">
                     <span className="de-quick-name">
                       {cat.name}
-                      {isOver && <span className="de-over-badge">⚠️ +{formatCurrency(overAmount)}</span>}
-                      {isComplete && <span className="de-complete-badge">✅</span>}
-                      {isDanger && <span className="de-danger-badge">⚠️ {displayPercent}%</span>}
+                      {isOver && <span className="de-over-badge">+{formatCurrency(overAmount)}</span>}
+                      {isComplete && <span className="de-complete-badge"><Icon e="✅" size={14} color="#16a34a" /></span>}
+                      {isDanger && <span className="de-danger-badge">{displayPercent}%</span>}
                     </span>
                     <span className="de-quick-stats">
                       <span className={`de-spent ${isOver ? 'over' : isComplete ? 'complete' : ''}`}>{formatCurrency(spent)}</span>
@@ -684,7 +689,7 @@ function Transactions() {
                     className="de-cat-menu"
                     onClick={() => openBudgetEdit(cat)}
                     title="ბიუჯეტის რედაქტირება"
-                  >⚙️</button>
+                  ><Icon e="⚙️" size={16} /></button>
                 </div>
               );
             })}
@@ -732,7 +737,7 @@ function Transactions() {
               <h4>დღის ჩანაწერები ({dayTransactions.length})</h4>
               {dayTransactions.length > 0 && (
                 <button className="de-delete-day-btn" onClick={handleDeleteDay} title="დღის წაშლა">
-                  🗑️ დღის წაშლა
+                  <Icon e="🗑️" size={14} /> დღის წაშლა
                 </button>
               )}
             </div>
@@ -742,12 +747,12 @@ function Transactions() {
                   const cat = getCategoryInfo(t.categoryId, t.type);
                   return (
                     <div key={t.id} className="de-hist-row">
-                      <span className="de-hist-icon" style={{ backgroundColor: cat.color + '25' }}>{cat.icon}</span>
+                      <span className="de-hist-icon" style={{ backgroundColor: cat.color + '25' }}><Icon e={cat.icon} size={18} color={cat.color} /></span>
                       <span className="de-hist-name">{t.description}</span>
                       <span className={`de-hist-amount ${t.type}`}>
                         {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                       </span>
-                      <button className="de-hist-edit" onClick={() => openEdit(t)} title="რედაქტირება">✎</button>
+                      <button className="de-hist-edit" onClick={() => openEdit(t)} title="რედაქტირება"><Icon e="✏️" size={15} /></button>
                       <button className="de-hist-del" onClick={() => handleDelete(t.id)}>×</button>
                     </div>
                   );
@@ -764,7 +769,7 @@ function Transactions() {
       {/* Transaction History with Search/Filter */}
       <div className="de-history-section">
         <div className="de-history-header">
-          <h4>📋 ტრანზაქციების ისტორია — {historyThisMonthOnly ? monthName : 'ყველა თვე'} ({filteredTransactions.length})</h4>
+          <h4><Icon e="📋" size={18} color="#3b82f6" /> ტრანზაქციების ისტორია — {historyThisMonthOnly ? monthName : 'ყველა თვე'} ({filteredTransactions.length})</h4>
           <button
             type="button"
             className="de-reset-btn"
@@ -776,7 +781,7 @@ function Transactions() {
           <input
             type="text"
             className="filter-search"
-            placeholder="🔍 ძებნა..."
+            placeholder="ძებნა..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -788,12 +793,12 @@ function Transactions() {
             <option value="all">ყველა კატეგორია</option>
             <optgroup label="შემოსავალი">
               {allCategories.income?.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </optgroup>
             <optgroup label="ხარჯები">
               {allCategories.expense?.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </optgroup>
           </select>
@@ -821,12 +826,12 @@ function Transactions() {
             return (
               <div key={t.id} className="de-hist-row">
                 <span className="de-hist-date">{formatDate(t.date, 'd MMM yyyy')}</span>
-                <span className="de-hist-icon" style={{ backgroundColor: cat.color + '25' }}>{cat.icon}</span>
+                <span className="de-hist-icon" style={{ backgroundColor: cat.color + '25' }}><Icon e={cat.icon} size={18} color={cat.color} /></span>
                 <span className="de-hist-name">{t.description}</span>
                 <span className={`de-hist-amount ${t.type}`}>
                   {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                 </span>
-                <button className="de-hist-edit" onClick={() => openEdit(t)} title="რედაქტირება">✎</button>
+                <button className="de-hist-edit" onClick={() => openEdit(t)} title="რედაქტირება"><Icon e="✏️" size={15} /></button>
                 <button className="de-hist-del" onClick={() => handleDelete(t.id)}>×</button>
               </div>
             );
@@ -846,17 +851,17 @@ function Transactions() {
         </div>
       </div>
 
-      {/* Confirmation for header actions (📋 🧹 🔄) */}
+      {/* Confirmation for the month header actions (copy budgets / trim / reset) */}
       {pendingAction && (
         <div className="de-modal-overlay" onClick={() => !actionBusy && setPendingAction(null)}>
           <div className="de-modal de-confirm" role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}>
-            <h3>{pendingAction.title}</h3>
+            <h3><Icon e={pendingAction.icon} size={22} color="var(--primary)" /> {pendingAction.title}</h3>
             <p className="de-confirm-text">{pendingAction.message}</p>
             <p className="de-confirm-month">თვე: <strong>{monthName} {currentYear}</strong></p>
             <div className="de-modal-actions">
               <button className="de-btn secondary" onClick={() => setPendingAction(null)} disabled={actionBusy} autoFocus>გაუქმება</button>
               <button className={`de-btn ${pendingAction.danger ? 'danger' : 'primary'}`} onClick={runPendingAction} disabled={actionBusy}>
-                {actionBusy ? '⏳ ...' : pendingAction.confirmLabel}
+                {actionBusy ? '...' : pendingAction.confirmLabel}
               </button>
             </div>
           </div>
@@ -888,7 +893,7 @@ function Transactions() {
                   <option value="">—</option>
                   {(allCategories[editingTx.type] || [])
                     .filter(c => !c.archived || c.id === editingTx.categoryId)
-                    .map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                    .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="de-form-group">
@@ -948,7 +953,7 @@ function Transactions() {
                 <div className="de-restore-list">
                   {restorableCategories.map(c => (
                     <button key={c.id} type="button" className="de-restore-chip" onClick={() => handleRestoreCategory(c.id)}>
-                      {c.icon} {c.name}{c.archived ? ' (არქივი)' : ''}
+                      <Icon e={c.icon} size={16} color={c.color} /> {c.name}{c.archived ? ' (არქივი)' : ''}
                     </button>
                   ))}
                 </div>
@@ -968,13 +973,13 @@ function Transactions() {
               <div className="de-form-group">
                 <label>ხატულა</label>
                 <div className="de-emoji-grid">
-                  {['🛒','🚕','👤','🏪','❓','📄','📱','🏠','💎','🎮','⛽','🏦','💼','🎓','🍔','☕','🎬','✈️','🏥','👶','🐾','🎵','📦','💡','🔧','👗','💻','🎁','🏋️','📚','🚗','🍕','🎨','💊','🧹','📸','🌍','🎯','🏖️','🎪'].map(emoji => (
+                  {PICKER_EMOJIS.map(emoji => (
                     <button
                       key={emoji}
                       type="button"
                       className={`de-emoji-btn ${newCategory.icon === emoji ? 'selected' : ''}`}
                       onClick={() => setNewCategory({ ...newCategory, icon: emoji })}
-                    >{emoji}</button>
+                    ><Icon e={emoji} size={22} color={newCategory.color} /></button>
                   ))}
                 </div>
               </div>

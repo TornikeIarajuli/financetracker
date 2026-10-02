@@ -14,6 +14,7 @@ import { format, subMonths, isSameMonth } from 'date-fns';
 import { ka } from 'date-fns/locale';
 import { parseDate } from '../utils/dates';
 import { formatGoalAmount, summarizeGoals, formatTotals, currencyOf } from '../utils/currency';
+import Icon from '../components/Icon';
 import {
   monthlyStats, monthToDateStats, spendingByCategory, yearCategoryTotals, stackedCategoryData,
   quarterlySummary as buildQuarterlySummary, categoryMonthlyTrend, yearsWithData,
@@ -205,7 +206,7 @@ function Dashboard() {
       {/* Stat Cards */}
       <div className="db-stats-row">
         <div className="db-stat income">
-          <div className="db-stat-icon">📈</div>
+          <div className="db-stat-icon"><Icon e="📈" size={26} color="#22c55e" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">შემოსავალი</span>
             <span className="db-stat-value">{formatCurrency(stats.income)}</span>
@@ -218,7 +219,7 @@ function Dashboard() {
         </div>
 
         <div className="db-stat expenses">
-          <div className="db-stat-icon">📉</div>
+          <div className="db-stat-icon"><Icon e="📉" size={26} color="#ef4444" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">ხარჯები</span>
             <span className="db-stat-value">{formatCurrency(stats.expenses)}</span>
@@ -234,7 +235,7 @@ function Dashboard() {
         </div>
 
         <div className="db-stat balance">
-          <div className="db-stat-icon">💰</div>
+          <div className="db-stat-icon"><Icon e="💰" size={26} color="#3b82f6" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">ბალანსი</span>
             <span className={`db-stat-value ${stats.balance >= 0 ? 'positive' : 'negative'}`}>
@@ -247,7 +248,7 @@ function Dashboard() {
         </div>
 
         <div className="db-stat daily">
-          <div className="db-stat-icon">📅</div>
+          <div className="db-stat-icon"><Icon e="📅" size={26} color="#06b6d4" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">დღიური ლიმიტი</span>
             {dailyBudget !== null ? (
@@ -264,7 +265,7 @@ function Dashboard() {
         </div>
 
         <div className="db-stat savings clickable" onClick={() => navigate('/goals#savings')} title="დანაზოგის მიზნები">
-          <div className="db-stat-icon">🎯</div>
+          <div className="db-stat-icon"><Icon e="🎯" size={26} color="#8b5cf6" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">დანაზოგი</span>
             <span className="db-stat-value">{formatTotals(savingsStats.totals)}</span>
@@ -281,7 +282,7 @@ function Dashboard() {
         </div>
 
         <div className="db-stat wishlist clickable" onClick={() => navigate('/goals#wishlist')} title="სურვილების სია">
-          <div className="db-stat-icon">⭐</div>
+          <div className="db-stat-icon"><Icon e="⭐" size={26} color="#f59e0b" /></div>
           <div className="db-stat-body">
             <span className="db-stat-label">სურვილები</span>
             <span className="db-stat-value">{wishlistCount}</span>
@@ -420,7 +421,7 @@ function Dashboard() {
             <select className="filter-select" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} style={{ fontSize: '0.75rem' }}>
               <option value="">კატეგორია...</option>
               {(categoriesData.expense || []).filter(c => !c.archived).map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
           </div>
@@ -508,7 +509,7 @@ function Dashboard() {
                   return (
                     <div key={cat.id} className="db-bar-item">
                       <div className="db-bar-meta">
-                        <span className="db-bar-name">{cat.icon} {cat.name}</span>
+                        <span className="db-bar-name"><Icon e={cat.icon} size={18} color={cat.color} /> {cat.name}</span>
                         <div className="db-bar-right">
                           {compareMonth && changePct !== null && (
                             <span className={`db-compare-chip ${changePct > 0 ? 'neg' : 'pos'}`}>
@@ -573,7 +574,7 @@ function Dashboard() {
                     return (
                       <div key={cat.id} className="db-bar-item">
                         <div className="db-bar-meta">
-                          <span className="db-bar-name">{cat.icon} {cat.name}</span>
+                          <span className="db-bar-name"><Icon e={cat.icon} size={18} color={cat.color} /> {cat.name}</span>
                           <div className="db-bar-right">
                             <div className="db-year-amt-wrap">
                               <span className="db-bar-amt">{formatCurrency(cat.value)}</span>
@@ -608,7 +609,7 @@ function Dashboard() {
                 return (
                   <div key={goal.id} className="db-goal-item">
                     <div className="db-goal-meta">
-                      <span className="db-goal-icon">{goal.icon}</span>
+                      <span className="db-goal-icon"><Icon e={goal.icon} size={22} color={goal.color} /></span>
                       <div className="db-goal-info">
                         <span className="db-goal-name">{goal.name}</span>
                         <span className="db-goal-amounts">{formatGoalAmount(goal.currentAmount, goal.currency)} / {formatGoalAmount(goal.targetAmount, goal.currency)}</span>
@@ -642,7 +643,7 @@ function Dashboard() {
                   <option value="">აირჩიეთ მიზანი</option>
                   {savingsGoalsList.map(goal => (
                     <option key={goal.id} value={goal.id}>
-                      {goal.icon} {goal.name} ({formatGoalAmount(goal.currentAmount, goal.currency)} / {formatGoalAmount(goal.targetAmount, goal.currency)})
+                      {goal.name} ({formatGoalAmount(goal.currentAmount, goal.currency)} / {formatGoalAmount(goal.targetAmount, goal.currency)})
                     </option>
                   ))}
                 </select>

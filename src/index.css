@@ -6819,3 +6819,32 @@ button.db-stat-action-badge:hover {
 .reports-page .stats-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+
+/* Hand-drawn icons (components/Icon.jsx) */
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+  line-height: 0;
+}
+
+.icon svg {
+  display: block;
+}
+
+h3 .icon,
+h4 .icon,
+button .icon {
+  margin-right: 0.15em;
+}
+
+.db-bar-name .icon,
+.dup-chip .icon,
+.de-restore-chip .icon {
+  vertical-align: -0.25em;
+}
+
+.login-logo {
+  display: flex;
+  justify-content: center;
+}

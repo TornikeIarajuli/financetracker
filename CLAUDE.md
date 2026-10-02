@@ -25,6 +25,7 @@ Personal finance tracker app in Georgian (React + Vite).
 - `dist/` — built output, rebuild with `npm run build`
 
 ## Key Conventions
+- Icons: no emojis in the UI. Use `<Icon e="📊" />` (`src/components/Icon.jsx`), which draws hand-drawn "Doodle Icons" (CC0, Khushmeen Sidhu) from `src/components/icons.generated.js`. Categories still store their emoji; `iconKeyFor()` maps it to an icon. Same generated file in `../finance-app` (keep identical)
 - Language: Georgian (ქართული) for ALL UI text
 - Currency: Georgian Lari (₾), formatted via `formatCurrency()` from db.js
 - Colors: primary=#3b82f6 (blue, see `--primary` in index.css)
