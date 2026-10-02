@@ -1,31 +1,31 @@
-import { useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import SavingsGoals from '../components/SavingsGoals';
 import Wishlist from './Wishlist';
 
-const TABS = [
-  { id: 'savings', label: '🎯 დანაზოგი' },
-  { id: 'wishlist', label: '⭐ სურვილები' },
-];
-
-// Savings goals and the wishlist on one page, switched by tab (?tab=...).
+// Savings goals and the wishlist rendered together on one page.
+// /goals#savings and /goals#wishlist scroll to the matching section.
 function Goals() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'wishlist' ? 'wishlist' : 'savings';
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (!hash) return;
+    // Both sections load their data asynchronously; wait a moment so the
+    // target is in its final position before scrolling.
+    const t = setTimeout(() => {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [hash]);
 
   return (
     <div className="goals-page">
-      <div className="report-tabs goals-tabs">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            className={`tab ${tab === t.id ? 'active' : ''}`}
-            onClick={() => setParams({ tab: t.id }, { replace: true })}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === 'savings' ? <SavingsGoals /> : <Wishlist />}
+      <section id="savings" className="goals-section">
+        <SavingsGoals />
+      </section>
+      <section id="wishlist" className="goals-section">
+        <Wishlist />
+      </section>
     </div>
   );
 }

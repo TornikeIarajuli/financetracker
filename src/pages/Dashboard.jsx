@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -20,6 +20,7 @@ import {
 } from '../utils/stats';
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [allTransactions, setAllTransactions] = useState([]);
@@ -241,7 +242,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="db-stat savings" onClick={() => setShowAddSavingsModal(true)}>
+        <div className="db-stat savings clickable" onClick={() => navigate('/goals#savings')} title="დანაზოგის მიზნები">
           <div className="db-stat-icon">🎯</div>
           <div className="db-stat-body">
             <span className="db-stat-label">დანაზოგი</span>
@@ -250,10 +251,15 @@ function Dashboard() {
               <span className="db-stat-sub">{savingsStats.goalCount} მიზანი · {savingsStats.progress}%</span>
             )}
           </div>
-          <div className="db-stat-action-badge">+</div>
+          <button
+            type="button"
+            className="db-stat-action-badge"
+            title="თანხის დამატება"
+            onClick={(e) => { e.stopPropagation(); setShowAddSavingsModal(true); }}
+          >+</button>
         </div>
 
-        <div className="db-stat wishlist">
+        <div className="db-stat wishlist clickable" onClick={() => navigate('/goals#wishlist')} title="სურვილების სია">
           <div className="db-stat-icon">⭐</div>
           <div className="db-stat-body">
             <span className="db-stat-label">სურვილები</span>
@@ -559,7 +565,7 @@ function Dashboard() {
         {/* Savings goals */}
         <div className="db-card">
           <div className="db-card-header">
-            <h3>დანაზოგის მიზნები</h3>
+            <h3><Link to="/goals#savings" className="db-card-title-link">დანაზოგის მიზნები</Link></h3>
             <button className="db-link-btn" onClick={() => setShowAddSavingsModal(true)}>+ დამატება</button>
           </div>
           {savingsGoalsList.length > 0 ? (
@@ -585,7 +591,7 @@ function Dashboard() {
             </div>
           ) : (
             <div className="empty-state-sm">
-              <Link to="/goals?tab=savings" className="view-all-link">+ შექმენი პირველი მიზანი</Link>
+              <Link to="/goals#savings" className="view-all-link">+ შექმენი პირველი მიზანი</Link>
             </div>
           )}
         </div>

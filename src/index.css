@@ -6627,7 +6627,41 @@ input:focus, select:focus, textarea:focus {
   padding: 2px;
 }
 
-/* Goals page (savings + wishlist tabs) */
-.goals-tabs {
-  margin: 0 0 1rem;
+/* Goals page: savings goals and wishlist stacked on one page */
+.goals-page .savings-goals-widget {
+  max-width: none;
+  margin: 0;
+}
+
+.goals-section + .goals-section {
+  margin-top: 1.5rem;
+}
+
+.goals-section {
+  scroll-margin-top: 1rem;
+}
+
+/* Dashboard: savings / wishlist cards open their section */
+.db-stat.clickable {
+  cursor: pointer;
+}
+
+button.db-stat-action-badge {
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+button.db-stat-action-badge:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.db-card-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.db-card-title-link:hover {
+  color: var(--primary);
 }

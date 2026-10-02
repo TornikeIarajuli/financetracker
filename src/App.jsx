@@ -131,8 +131,8 @@ function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/goals" element={<Goals />} />
             {/* old addresses keep working */}
-            <Route path="/wishlist" element={<Navigate to="/goals?tab=wishlist" replace />} />
-            <Route path="/savings" element={<Navigate to="/goals?tab=savings" replace />} />
+            <Route path="/wishlist" element={<Navigate to="/goals#wishlist" replace />} />
+            <Route path="/savings" element={<Navigate to="/goals#savings" replace />} />
             <Route path="/reports" element={<Reports />} />
           </Routes>
         </Suspense>
