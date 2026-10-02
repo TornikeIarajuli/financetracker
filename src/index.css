@@ -6328,3 +6328,62 @@ input:focus, select:focus, textarea:focus {
 .sync-dot.error {
   background: #ef4444;
 }
+
+/* Full-screen sign-in gate */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg-primary);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 2rem 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.login-logo {
+  font-size: 2.5rem;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.login-subtitle {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.login-card input {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: inherit;
+  font-size: 1rem;
+}
+
+.login-card .btn {
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+
+.login-error {
+  margin: 0;
+  color: #ef4444;
+  font-size: 0.875rem;
+}

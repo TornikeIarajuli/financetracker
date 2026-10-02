@@ -1,9 +1,10 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, Link } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import LoginScreen from './components/LoginScreen';
 import { useTheme } from './store/ThemeContext';
-import { startupCloudSync, getSyncStatus, onSyncStatus, DATA_CHANGED_EVENT, triggerAutoSync, hasUnsyncedChanges } from './store/db';
-import { isSupabaseConfigured, getSession, onAuthChange } from './store/supabase';
+import { startupCloudSync, getSyncStatus, onSyncStatus, DATA_CHANGED_EVENT, triggerAutoSync } from './store/db';
+import { isSupabaseConfigured, isRemembered, onAuthChange } from './store/supabase';
 import './App.css';
 
 // Secondary pages load on demand to keep the first bundle small.
@@ -13,7 +14,6 @@ const Reports = lazy(() => import('./pages/Reports'));
 const SavingsGoals = lazy(() => import('./components/SavingsGoals'));
 
 const SYNC_TITLES = {
-  'signed-out': 'ღრუბელი: შედით ანგარიშში (ანგარიში → იმპორტი/ექსპორტი)',
   syncing: 'სინქრონიზაცია...',
   synced: 'ღრუბელთან სინქრონიზებულია',
   error: 'სინქრონიზაციის შეცდომა',
@@ -21,29 +21,42 @@ const SYNC_TITLES = {
 
 function App() {
   const { toggleTheme, isDark } = useTheme();
-  const [isReady, setIsReady] = useState(false);
+  // 'checking' → 'signed-out' (login screen) | 'signed-in' (app). Nothing
+  // from the user's data renders until this is 'signed-in'.
+  const [authState, setAuthState] = useState('checking');
   const [syncStatus, setSyncStatus] = useState(getSyncStatus());
   // Bumped when a sync brings in changes from another device, so the open
   // page re-reads its data.
   const [dataVersion, setDataVersion] = useState(0);
 
+  // Pull the latest cloud data before showing the app (bounded, so a slow
+  // network never blocks the UI for long).
+  const syncThenEnter = async () => {
+    setAuthState('checking');
+    await Promise.race([startupCloudSync(), new Promise(r => setTimeout(r, 6000))]);
+    setAuthState('signed-in');
+  };
+
   useEffect(() => {
     const boot = async () => {
-      if (isSupabaseConfigured()) {
-        const session = await getSession();
-        if (session) {
-          const timeout = new Promise(r => setTimeout(r, 6000));
-          await Promise.race([startupCloudSync(), timeout]);
-        }
-      }
-      setIsReady(true);
+      // Without a configured backend there is nothing to sign in to.
+      if (!isSupabaseConfigured()) { setAuthState('signed-in'); return; }
+      if (await isRemembered()) await syncThenEnter();
+      else setAuthState('signed-out');
     };
     boot();
 
     const offStatus = onSyncStatus(setSyncStatus);
     const offAuth = onAuthChange(session => {
-      if (!session) setSyncStatus(getSyncStatus());
-      else if (hasUnsyncedChanges()) triggerAutoSync();
+      if (!session) {
+        // Only an explicit sign-out (or a revoked login) ends the session.
+        setSyncStatus(getSyncStatus());
+        setAuthState(prev => (prev === 'signed-in' ? 'signed-out' : prev));
+      } else {
+        // Session (re)established — e.g. the token refreshed after being
+        // offline — so catch up with the cloud.
+        triggerAutoSync();
+      }
     });
     const onDataChanged = () => setDataVersion(v => v + 1);
     window.addEventListener(DATA_CHANGED_EVENT, onDataChanged);
@@ -54,7 +67,11 @@ function App() {
     };
   }, []);
 
-  if (!isReady) {
+  if (authState === 'signed-out') {
+    return <LoginScreen onSignedIn={syncThenEnter} />;
+  }
+
+  if (authState === 'checking') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '12px', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
         <span style={{ fontSize: '2rem' }}>☁️</span>
@@ -109,7 +126,7 @@ function App() {
           {syncStatus.state !== 'off' && (
             <Link to="/reports" className="sync-indicator" title={SYNC_TITLES[syncStatus.state] || ''}>
               <span className={`sync-dot ${syncStatus.state === 'synced' ? 'synced' : ''} ${syncStatus.state === 'error' ? 'error' : ''}`} />
-              {syncStatus.state === 'signed-out' ? '🔒' : '☁️'}
+              ☁️
             </Link>
           )}
         </div>

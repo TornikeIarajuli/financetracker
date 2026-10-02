@@ -3,8 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// The session is kept in localStorage and refreshed automatically, so a
+// signed-in device stays signed in until the user signs out.
 export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    })
   : null;
 
 export const isSupabaseConfigured = () => !!supabase;
@@ -16,11 +20,32 @@ export const isSupabaseConfigured = () => !!supabase;
 let currentSession = null;
 const authListeners = new Set();
 
+// localStorage key supabase-js uses for the saved session.
+const storageKey = () => `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+
+const hasStoredSession = () => {
+  try { return !!localStorage.getItem(storageKey()); } catch { return false; }
+};
+
 export const getSession = async () => {
   if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
   currentSession = data?.session || null;
   return currentSession;
+};
+
+// True when this device has a saved login. Offline, an expired access token
+// can't be refreshed yet (supabase-js keeps retrying and getSession() doesn't
+// resolve), but the saved login is still valid and refreshes once the
+// connection is back — that must neither block startup nor bounce the user to
+// the login screen.
+export const isRemembered = async () => {
+  if (!hasStoredSession()) return false;
+  const session = await Promise.race([
+    getSession(),
+    new Promise(r => setTimeout(() => r('pending'), 3000)),
+  ]);
+  return session === 'pending' || !!session;
 };
 
 export const isSignedIn = () => !!currentSession;

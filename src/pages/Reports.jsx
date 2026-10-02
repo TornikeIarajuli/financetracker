@@ -8,7 +8,7 @@ import {
   syncNow, getSyncStatus, onSyncStatus, getBackupInfo, restoreFromBackup,
   getPreSyncSnapshot, restorePreSyncSnapshot,
 } from '../store/db';
-import { isSupabaseConfigured, isSignedIn, getUserEmail, onAuthChange, signIn, signOut } from '../store/supabase';
+import { isSupabaseConfigured, isSignedIn, getUserEmail, onAuthChange, signOut } from '../store/supabase';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ka } from 'date-fns/locale';
 import { inRange } from '../utils/dates';
@@ -37,7 +37,6 @@ function Reports() {
   const [syncStatus, setSyncStatus] = useState(getSyncStatus());
   const [signedIn, setSignedIn] = useState(isSignedIn());
   const [syncMsg, setSyncMsg] = useState('');
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
 
   async function loadData() {
     const [trans, cats] = await Promise.all([getTransactions(), getCategories()]);
@@ -178,17 +177,8 @@ function Reports() {
     }
   };
 
-  const handleSignIn = async (e) => {
-    e.preventDefault();
-    setSyncMsg('');
-    const result = await signIn(loginForm.email.trim(), loginForm.password);
-    if (!result.success) { setSyncMsg(`❌ ${result.error}`); return; }
-    setLoginForm({ email: '', password: '' });
-    await handleSync();
-  };
-
   const handleSignOut = async () => {
-    if (!confirm('გასვლის შემდეგ მონაცემები ამ მოწყობილობაზე დარჩება, მაგრამ ღრუბელთან აღარ სინქრონიზდება. გავიდეთ?')) return;
+    if (!confirm('გასვლის შემდეგ ხელახლა შესვლა დაგჭირდებათ. მონაცემები არ წაიშლება. გავიდეთ?')) return;
     await signOut();
     setSyncMsg('');
   };
@@ -598,29 +588,7 @@ function Reports() {
                 </div>
               </>
             ) : (
-              <>
-                <p>შედით, რომ მონაცემები ღრუბელთან სინქრონიზდეს. მანამდე ყველაფერი ამ მოწყობილობაზე ინახება.</p>
-                <form className="login-form" onSubmit={handleSignIn}>
-                  <input
-                    type="email"
-                    placeholder="ელ-ფოსტა"
-                    autoComplete="username"
-                    value={loginForm.email}
-                    onChange={e => setLoginForm({ ...loginForm, email: e.target.value })}
-                    required
-                  />
-                  <input
-                    type="password"
-                    placeholder="პაროლი"
-                    autoComplete="current-password"
-                    value={loginForm.password}
-                    onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
-                    required
-                  />
-                  <button className="btn btn-primary" type="submit">შესვლა</button>
-                </form>
-                {syncMsg && <p style={{ color: '#ef4444', fontWeight: 600 }}>{syncMsg}</p>}
-              </>
+              <p>ღრუბელთან კავშირი არ არის — მონაცემები ამ მოწყობილობაზე ინახება და ავტომატურად სინქრონიზდება, როცა ინტერნეტი აღდგება.</p>
             )}
             {isSupabaseConfigured() && (
               <details style={{ marginTop: '1rem' }}>
