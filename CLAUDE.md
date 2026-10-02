@@ -34,7 +34,8 @@ Personal finance tracker app in Georgian (React + Vite).
 ## Data Architecture
 - **Categories are per-month** (`monthlyCategories` store, DB v5)
   - Each month has its own independent category snapshot
-  - First visit to a month creates snapshot from global categories
+  - First visit to a month creates its snapshot from the previous month's list, keeping only categories used last month (or already this month); falls back to the full list if nothing was used. Existing snapshots are never rewritten automatically
+  - 🧹 on Transactions applies the same filter to the current month; "+ დამატება" can re-add an existing category by id (keeps history)
   - Adding/deleting categories in one month does NOT affect other months
   - Global `categories` store is kept for cross-month lookups (Reports, Dashboard trends)
 - **Budgets are per-month** (`monthlyBudgets` store)
