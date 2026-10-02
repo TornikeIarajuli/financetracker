@@ -6665,3 +6665,18 @@ button.db-stat-action-badge:hover {
 .db-card-title-link:hover {
   color: var(--primary);
 }
+
+/* Confirmation dialog for the month header actions */
+.de-confirm-text {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.de-confirm-month {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}

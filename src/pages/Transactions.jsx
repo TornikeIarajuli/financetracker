@@ -57,6 +57,10 @@ function Transactions() {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [editingTx, setEditingTx] = useState(null); // copy of the transaction being edited
   const [savedToast, setSavedToast] = useState(null);
+  // { title, message, confirmLabel, run } — header actions only run after the
+  // user confirms in this dialog.
+  const [pendingAction, setPendingAction] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   // Drag and drop state
   const [draggedCategory, setDraggedCategory] = useState(null);
@@ -148,15 +152,31 @@ function Transactions() {
     setMonthlyBudgets(merged);
   };
 
-  const handleCopyPrevBudgets = async () => {
-    const res = await copyPreviousMonthBudgets(currentYear, currentMonth);
-    if (!res || res.copied === 0) {
-      alert('წინა თვეში ბიუჯეტები არ მოიძებნა');
-      return;
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    setActionBusy(true);
+    try {
+      await pendingAction.run();
+    } finally {
+      setActionBusy(false);
+      setPendingAction(null);
     }
-    await loadMonthlySpending();
-    alert(`${res.copied} ბიუჯეტი გადმოკოპირდა წინა თვიდან`);
   };
+
+  const handleCopyPrevBudgets = () => setPendingAction({
+    title: '📋 ბიუჯეტების გადმოკოპირება',
+    message: 'წინა თვის ბიუჯეტები გადმოვა ამ თვეში. ბიუჯეტები, რომლებიც ამ თვეში უკვე დაყენებულია, არ შეიცვლება.',
+    confirmLabel: 'გადმოკოპირება',
+    run: async () => {
+      const res = await copyPreviousMonthBudgets(currentYear, currentMonth);
+      if (!res || res.copied === 0) {
+        alert('გადმოსაკოპირებელი ბიუჯეტი არ მოიძებნა.');
+        return;
+      }
+      await loadMonthlySpending();
+      alert(`${res.copied} ბიუჯეტი გადმოკოპირდა წინა თვიდან.`);
+    },
+  });
 
   // Calculate last 10 days spending by category
   const last10DaysData = useMemo(() => {
@@ -304,12 +324,16 @@ function Transactions() {
     }
   };
 
-  const handleTrimCategories = async () => {
-    if (!confirm('ამ თვის სიაში დავტოვოთ მხოლოდ ის კატეგორიები, რომლებიც წინა ან ამ თვეში გამოიყენეთ? ჩანაწერები და კატეგორიები არ წაიშლება — საჭიროებისას „+ დამატება“-დან დააბრუნებთ.')) return;
-    const { removed } = await trimMonthCategoriesToUsed(currentYear, currentMonth);
-    await loadMonthCategories();
-    alert(removed ? `სიიდან მოიხსნა ${removed} გამოუყენებელი კატეგორია.` : 'ყველა კატეგორია გამოყენებულია — არაფერი შეცვლილა.');
-  };
+  const handleTrimCategories = () => setPendingAction({
+    title: '🧹 გამოუყენებელი კატეგორიების მოხსნა',
+    message: 'ამ თვის სიაში დარჩება მხოლოდ კატეგორიები, რომლებიც წინა ან ამ თვეში გამოიყენეთ. ჩანაწერები და კატეგორიები არ წაიშლება — საჭიროებისას „+ დამატება“-დან დააბრუნებთ.',
+    confirmLabel: 'მოხსნა',
+    run: async () => {
+      const { removed } = await trimMonthCategoriesToUsed(currentYear, currentMonth);
+      await loadMonthCategories();
+      alert(removed ? `სიიდან მოიხსნა ${removed} გამოუყენებელი კატეგორია.` : 'ყველა კატეგორია გამოყენებულია — არაფერი შეცვლილა.');
+    },
+  });
 
   const handleRestoreCategory = async (categoryId) => {
     await addExistingCategoryToMonth(currentYear, currentMonth, categoryId);
@@ -317,12 +341,16 @@ function Transactions() {
     await loadMonthCategories();
   };
 
-  const handleResetCategories = async () => {
-    if (confirm('გსურთ ამ თვის კატეგორიების გადატვირთვა? ეს წაშლის არსებულ კატეგორიებს და დაამატებს ნაგულისხმევს.')) {
+  const handleResetCategories = () => setPendingAction({
+    title: '🔄 კატეგორიების გადატვირთვა',
+    message: 'ამ თვის კატეგორიების სია შეიცვლება ნაგულისხმევი სიით. ჩანაწერები და კატეგორიები არ წაიშლება — მოხსნილ კატეგორიებს „+ დამატება“-დან დააბრუნებთ.',
+    confirmLabel: 'გადატვირთვა',
+    danger: true,
+    run: async () => {
       await resetMonthCategoriesToDefaults(currentYear, currentMonth);
       await loadMonthCategories();
-    }
-  };
+    },
+  });
 
   // Filtered transactions for history
   const filteredTransactions = useMemo(() => {
@@ -817,6 +845,23 @@ function Transactions() {
           )}
         </div>
       </div>
+
+      {/* Confirmation for header actions (📋 🧹 🔄) */}
+      {pendingAction && (
+        <div className="de-modal-overlay" onClick={() => !actionBusy && setPendingAction(null)}>
+          <div className="de-modal de-confirm" role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h3>{pendingAction.title}</h3>
+            <p className="de-confirm-text">{pendingAction.message}</p>
+            <p className="de-confirm-month">თვე: <strong>{monthName} {currentYear}</strong></p>
+            <div className="de-modal-actions">
+              <button className="de-btn secondary" onClick={() => setPendingAction(null)} disabled={actionBusy} autoFocus>გაუქმება</button>
+              <button className={`de-btn ${pendingAction.danger ? 'danger' : 'primary'}`} onClick={runPendingAction} disabled={actionBusy}>
+                {actionBusy ? '⏳ ...' : pendingAction.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Transaction Modal */}
       {editingTx && (
