@@ -14,7 +14,7 @@ import {
   RECORD_KEYS, mergeDatasets, datasetsEqual, toCloudDocument, stableStringify,
   flattenCategories, groupCategories,
 } from './syncMerge';
-import { parseDate } from '../utils/dates';
+import { parseDate, inMonth } from '../utils/dates';
 
 const DB_NAME = 'FinanceTrackerDB';
 const DB_VERSION = 5;
@@ -407,25 +407,73 @@ export const getCategories = locked(async () => {
 // Each month gets its own independent category list.
 // ============================================
 
+const prevMonthOf = (year, month) => (month === 0 ? [year - 1, 11] : [year, month - 1]);
+
+// Narrow a category list to the ones actually used: in the previous month or
+// already in this month. Keeps `base` order; used categories missing from
+// `base` are appended from the global list. If nothing was used at all, the
+// base list is returned unchanged so a month never starts empty.
+const keepUsedCategories = async (year, month, base) => {
+  const [py, pm] = prevMonthOf(year, month);
+  const transactions = await getAllFromStore('transactions');
+  const global = await readGroupedCategories();
+  const out = {};
+  for (const type of ['income', 'expense']) {
+    const used = new Set(transactions
+      .filter(t => t.type === type && t.categoryId && (inMonth(t, py, pm) || inMonth(t, year, month)))
+      .map(t => t.categoryId));
+    const kept = (base[type] || []).filter(c => used.has(c.id));
+    const keptIds = new Set(kept.map(c => c.id));
+    const extra = global[type].filter(c => used.has(c.id) && !keptIds.has(c.id)).map(c => ({ ...c }));
+    const result = [...kept, ...extra];
+    out[type] = result.length ? result : (base[type] || []);
+  }
+  return out;
+};
+
 const getMonthCategoriesUnlocked = async (year, month) => {
   const id = `${year}_${month}`;
   const existing = await getFromStore('monthlyCategories', id);
   if (existing) {
     return { income: existing.income || [], expense: existing.expense || [] };
   }
-  // First visit to this month — snapshot from global categories
+  // First visit to this month: start from last month's list (or the global
+  // categories if there is none) and keep only the categories used last month.
   await seedCategoriesIfEmpty();
+  const [py, pm] = prevMonthOf(year, month);
+  const prevSnapshot = await getFromStore('monthlyCategories', `${py}_${pm}`);
   const globalCats = await readGroupedCategories();
+  const base = prevSnapshot
+    ? { income: prevSnapshot.income || [], expense: prevSnapshot.expense || [] }
+    : {
+        income: globalCats.income.filter(c => !c.archived),
+        expense: globalCats.expense.filter(c => !c.archived),
+      };
+  const cats = await keepUsedCategories(year, month, base);
   const snapshot = {
     id,
     year,
     month,
-    income: globalCats.income.filter(c => !c.archived).map(c => ({ ...c })),
-    expense: globalCats.expense.filter(c => !c.archived).map(c => ({ ...c })),
+    income: cats.income.map(c => ({ ...c })),
+    expense: cats.expense.map(c => ({ ...c })),
   };
   await putToStore('monthlyCategories', snapshot);
   return { income: snapshot.income, expense: snapshot.expense };
 };
+
+// Apply the same "used last month (or this month)" filter to a month that
+// already has a list. Only that month's list changes; categories and
+// transactions are untouched, and removed cards can be re-added any time.
+export const trimMonthCategoriesToUsed = locked(async (year, month) => {
+  const current = await getMonthCategoriesUnlocked(year, month);
+  const trimmed = await keepUsedCategories(year, month, current);
+  const removed = (current.income.length + current.expense.length) - (trimmed.income.length + trimmed.expense.length);
+  if (removed > 0) {
+    await saveMonthSnapshot(year, month, trimmed);
+    afterWrite();
+  }
+  return { removed };
+});
 
 export const getMonthCategories = locked(getMonthCategoriesUnlocked);
 
@@ -446,6 +494,23 @@ export const addMonthCategory = locked(async (year, month, type, category) => {
   await putToStore('categories', newCat);
   afterWrite();
   return newCat;
+});
+
+// Put an existing category back on a month's list (same id, so its history
+// stays in one place). Un-archives it if it was archived.
+export const addExistingCategoryToMonth = locked(async (year, month, categoryId) => {
+  const cat = await getFromStore('categories', categoryId);
+  if (!cat) return null;
+  const type = cat.type === 'income' ? 'income' : 'expense';
+  const cats = await getMonthCategoriesUnlocked(year, month);
+  if (!(cats[type] || []).some(c => c.id === categoryId)) {
+    const restored = { ...cat, archived: undefined };
+    cats[type] = [...(cats[type] || []), restored];
+    await saveMonthSnapshot(year, month, cats);
+    if (cat.archived) await putToStore('categories', restored);
+    afterWrite();
+  }
+  return cat;
 });
 
 // Remove a category from one month's list. The global category and every

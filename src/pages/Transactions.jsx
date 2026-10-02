@@ -15,6 +15,8 @@ import {
   getMonthlyBudgets,
   setMonthlyBudget,
   copyPreviousMonthBudgets,
+  trimMonthCategoriesToUsed,
+  addExistingCategoryToMonth,
   formatCurrency
 } from '../store/db';
 import { format, subDays, addDays } from 'date-fns';
@@ -22,6 +24,18 @@ import { ka } from 'date-fns/locale';
 import { parseDate, formatDate, inMonth, isValidDate } from '../utils/dates';
 
 const HISTORY_PAGE = 50;
+
+// Amount fields accept simple sums like "12+5" or "20-3.5" (comma decimals ok).
+// Returns null for anything that isn't a valid positive amount.
+const parseAmount = (raw) => {
+  const text = String(raw ?? '').replace(/\s+/g, '').replace(/,/g, '.');
+  if (!text) return null;
+  if (!/^[+-]?\d*\.?\d+([+-]\d*\.?\d+)*$/.test(text)) return null;
+  const total = (text.match(/[+-]?\d*\.?\d+/g) || []).reduce((s, n) => s + parseFloat(n), 0);
+  const rounded = Math.round(total * 100) / 100;
+  return rounded > 0 ? rounded : null;
+};
+const isExpression = (raw) => /\d\s*[+-]\s*\d/.test(String(raw ?? ''));
 
 function Transactions() {
   const [transactions, setTransactions] = useState([]);
@@ -42,6 +56,7 @@ function Transactions() {
   const [budgetValue, setBudgetValue] = useState('');
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [editingTx, setEditingTx] = useState(null); // copy of the transaction being edited
+  const [savedToast, setSavedToast] = useState(null);
 
   // Drag and drop state
   const [draggedCategory, setDraggedCategory] = useState(null);
@@ -178,7 +193,12 @@ function Transactions() {
     try {
       const transactionsToAdd = [];
 
-      if (bulkIncome && parseFloat(bulkIncome) > 0) {
+      const incomeAmount = parseAmount(bulkIncome);
+      if (bulkIncome && !incomeAmount) {
+        alert(`შემოსავლის თანხა ვერ გავიგე: "${bulkIncome}"`);
+        return;
+      }
+      if (incomeAmount) {
         // Prefer the salary category, but never silently drop the amount if it
         // was renamed: fall back to any other income category.
         const incomeCats = [...(categories.income || []), ...(allCategories.income || [])].filter(c => !c.archived);
@@ -189,7 +209,7 @@ function Transactions() {
         }
         transactionsToAdd.push({
           type: 'income',
-          amount: parseFloat(bulkIncome),
+          amount: incomeAmount,
           description: incomeCat.name,
           categoryId: incomeCat.id,
           date: selectedDate,
@@ -197,12 +217,20 @@ function Transactions() {
         });
       }
 
-      Object.entries(bulkFormData).forEach(([categoryId, amount]) => {
-        if (amount && parseFloat(amount) > 0) {
+      const invalid = Object.entries(bulkFormData).filter(([, v]) => String(v).trim() && !parseAmount(v));
+      if (invalid.length) {
+        const names = invalid.map(([id]) => categories.expense?.find(c => c.id === id)?.name || '?').join(', ');
+        alert(`თანხა ვერ გავიგე: ${names}`);
+        return;
+      }
+
+      Object.entries(bulkFormData).forEach(([categoryId, raw]) => {
+        const amount = parseAmount(raw);
+        if (amount) {
           const cat = categories.expense?.find(c => c.id === categoryId);
           transactionsToAdd.push({
             type: 'expense',
-            amount: parseFloat(amount),
+            amount,
             description: cat?.name || 'ხარჯი',
             categoryId: categoryId,
             date: selectedDate,
@@ -219,6 +247,9 @@ function Transactions() {
         await addBulkTransactions(transactionsToAdd);
         await loadData();
         resetForm();
+        const total = transactionsToAdd.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        setSavedToast(`✅ შენახულია: ${transactionsToAdd.length} ჩანაწერი${total ? ` · ${formatCurrency(total)}` : ''}`);
+        setTimeout(() => setSavedToast(null), 3000);
       }
     } catch (err) {
       console.error('Error saving bulk transactions:', err);
@@ -271,6 +302,19 @@ function Transactions() {
       setShowBudgetEdit(null);
       await loadMonthCategories();
     }
+  };
+
+  const handleTrimCategories = async () => {
+    if (!confirm('ამ თვის სიაში დავტოვოთ მხოლოდ ის კატეგორიები, რომლებიც წინა ან ამ თვეში გამოიყენეთ? ჩანაწერები და კატეგორიები არ წაიშლება — საჭიროებისას „+ დამატება“-დან დააბრუნებთ.')) return;
+    const { removed } = await trimMonthCategoriesToUsed(currentYear, currentMonth);
+    await loadMonthCategories();
+    alert(removed ? `სიიდან მოიხსნა ${removed} გამოუყენებელი კატეგორია.` : 'ყველა კატეგორია გამოყენებულია — არაფერი შეცვლილა.');
+  };
+
+  const handleRestoreCategory = async (categoryId) => {
+    await addExistingCategoryToMonth(currentYear, currentMonth, categoryId);
+    setShowAddCategory(false);
+    await loadMonthCategories();
   };
 
   const handleResetCategories = async () => {
@@ -406,7 +450,19 @@ function Transactions() {
   const goToNextDay = () => setSelectedDate(format(addDays(selectedDay, 1), 'yyyy-MM-dd'));
   const goToToday = () => setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
 
-  const bulkTotal = Object.values(bulkFormData).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+  const bulkTotal = Object.values(bulkFormData).reduce((sum, val) => sum + (parseAmount(val) || 0), 0);
+  const bulkCount = Object.values(bulkFormData).filter(v => parseAmount(v)).length + (parseAmount(bulkIncome) ? 1 : 0);
+
+  // Expense categories that exist but aren't on this month's list.
+  const restorableCategories = (allCategories.expense || [])
+    .filter(c => !(categories.expense || []).some(m => m.id === c.id));
+
+  const submitOnEnter = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleBulkSubmit(e);
+    }
+  };
 
   const monthName = format(selectedDay, 'LLLL', { locale: ka });
 
@@ -507,30 +563,34 @@ function Transactions() {
             </h4>
             <div className="de-header-actions">
               <button className="de-reset-btn" onClick={handleCopyPrevBudgets} title="ბიუჯეტების გადმოკოპირება წინა თვიდან">📋</button>
+              <button className="de-reset-btn" onClick={handleTrimCategories} title="დატოვე მხოლოდ წინა/ამ თვეში გამოყენებული კატეგორიები">🧹</button>
               <button className="de-reset-btn" onClick={handleResetCategories} title="კატეგორიების გადატვირთვა">🔄</button>
               <button className="de-add-btn" onClick={() => setShowAddCategory(true)}>+ დამატება</button>
             </div>
           </div>
 
-          <form onSubmit={handleBulkSubmit} className="de-categories-grid">
+          <p className="de-quick-hint">ჩაწერეთ თანხები და დააჭირეთ Enter-ს. შეიძლება შეკრებაც: <code>12+5</code></p>
+
+          <form onSubmit={handleBulkSubmit} className="de-quick-list">
             {/* Income */}
-            <div className="de-cat-card income-card">
-              <div className="de-cat-header">
-                <span className="de-cat-icon">💼</span>
-                <span className="de-cat-name">შემოსავალი</span>
-              </div>
-              <div className="de-cat-input-row">
+            <label className={`de-quick-row income ${parseAmount(bulkIncome) ? 'has-value' : ''}`}>
+              <span className="de-quick-icon">💼</span>
+              <span className="de-quick-main">
+                <span className="de-quick-name">შემოსავალი</span>
+              </span>
+              <span className="de-quick-input">
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                   value={bulkIncome}
                   onChange={(e) => setBulkIncome(e.target.value)}
+                  onKeyDown={submitOnEnter}
                   placeholder="0"
                 />
-                <span>₾</span>
-              </div>
-            </div>
+                {isExpression(bulkIncome) && parseAmount(bulkIncome) && <span className="de-quick-sum">= {parseAmount(bulkIncome)}</span>}
+              </span>
+            </label>
 
             {/* Expense categories */}
             {categories.expense?.map(cat => {
@@ -543,11 +603,13 @@ function Transactions() {
               const overAmount = isOver ? spent - budget : 0;
               const displayPercent = budget > 0 ? Math.round(percent) : 0;
               const isDragOver = dragOverCategory === cat.id;
+              const raw = bulkFormData[cat.id] || '';
+              const value = parseAmount(raw);
 
               return (
                 <div
                   key={cat.id}
-                  className={`de-cat-card ${isOver ? 'over-budget' : ''} ${isComplete ? 'complete-budget' : ''} ${isDanger ? 'danger-budget' : ''} ${isDragOver ? 'drag-over' : ''}`}
+                  className={`de-quick-row ${isOver ? 'over-budget' : ''} ${isComplete ? 'complete-budget' : ''} ${isDanger ? 'danger-budget' : ''} ${isDragOver ? 'drag-over' : ''} ${value ? 'has-value' : ''} ${raw && !value ? 'invalid' : ''}`}
                   draggable
                   onDragStart={(e) => handleDragStart(e, cat)}
                   onDragEnd={handleDragEnd}
@@ -555,71 +617,61 @@ function Transactions() {
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, cat)}
                 >
-                  <div className="de-cat-header">
-                    <span className="de-drag-handle" title="გადაათრიე">⋮⋮</span>
-                    <span className="de-cat-icon" style={{ backgroundColor: cat.color + '25' }}>
-                      {cat.icon}
+                  <span className="de-quick-icon" style={{ backgroundColor: cat.color + '25' }} title="გადაათრიე რიგის შესაცვლელად">{cat.icon}</span>
+                  <span className="de-quick-main">
+                    <span className="de-quick-name">
+                      {cat.name}
+                      {isOver && <span className="de-over-badge">⚠️ +{formatCurrency(overAmount)}</span>}
+                      {isComplete && <span className="de-complete-badge">✅</span>}
+                      {isDanger && <span className="de-danger-badge">⚠️ {displayPercent}%</span>}
                     </span>
-                    <span className="de-cat-name">{cat.name}</span>
-                    {isOver && <span className="de-over-badge">⚠️ +{formatCurrency(overAmount)}</span>}
-                    {isComplete && <span className="de-complete-badge">✅</span>}
-                    {isDanger && <span className="de-danger-badge">⚠️ {displayPercent}%</span>}
-                    <button
-                      type="button"
-                      className="de-cat-menu"
-                      onClick={() => openBudgetEdit(cat)}
-                      title="ბიუჯეტის რედაქტირება"
-                    >⚙️</button>
-                  </div>
-
-                  {budget > 0 && (
-                    <div className="de-budget-bar">
-                      <div
-                        className={`de-budget-fill ${isOver ? 'over' : ''} ${isComplete ? 'complete' : ''} ${isDanger ? 'danger' : ''}`}
-                        style={{ width: `${Math.min(percent, 100)}%`, backgroundColor: isOver ? '#ef4444' : isComplete ? '#22c55e' : isDanger ? '#f59e0b' : cat.color }}
-                      />
-                      {isOver && (
-                        <div className="de-budget-overflow" style={{ width: `${Math.min((overAmount / budget) * 100, 50)}%` }} />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="de-cat-stats">
-                    <span className={`de-spent ${isOver ? 'over' : isComplete ? 'complete' : ''}`}>{formatCurrency(spent)}</span>
+                    <span className="de-quick-stats">
+                      <span className={`de-spent ${isOver ? 'over' : isComplete ? 'complete' : ''}`}>{formatCurrency(spent)}</span>
+                      {budget > 0 && <span className="de-budget"> / {formatCurrency(budget)}</span>}
+                    </span>
                     {budget > 0 && (
-                      <>
-                        <span className="de-budget">/ {formatCurrency(budget)}</span>
-                        <span className={`de-percent ${isOver ? 'over' : isComplete ? 'complete' : isDanger ? 'danger' : ''}`}>
-                          ({displayPercent}%)
-                        </span>
-                      </>
+                      <span className="de-budget-bar">
+                        <span
+                          className={`de-budget-fill ${isOver ? 'over' : ''} ${isComplete ? 'complete' : ''} ${isDanger ? 'danger' : ''}`}
+                          style={{ width: `${Math.min(percent, 100)}%`, backgroundColor: isOver ? '#ef4444' : isComplete ? '#22c55e' : isDanger ? '#f59e0b' : cat.color }}
+                        />
+                      </span>
                     )}
-                  </div>
-
-                  <div className="de-cat-input-row">
+                  </span>
+                  <span className="de-quick-input">
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={bulkFormData[cat.id] || ''}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      aria-label={cat.name}
+                      value={raw}
                       onChange={(e) => setBulkFormData({ ...bulkFormData, [cat.id]: e.target.value })}
+                      onKeyDown={submitOnEnter}
                       placeholder="0"
                     />
-                    <span>₾</span>
-                  </div>
+                    {isExpression(raw) && value && <span className="de-quick-sum">= {value}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    className="de-cat-menu"
+                    onClick={() => openBudgetEdit(cat)}
+                    title="ბიუჯეტის რედაქტირება"
+                  >⚙️</button>
                 </div>
               );
             })}
           </form>
 
-          {/* Form footer */}
-          <div className="de-form-footer">
+          {/* Sticky save bar */}
+          <div className="de-form-footer de-quick-footer">
             <div className="de-form-totals">
-              <span>სულ: <strong className="expense">{formatCurrency(bulkTotal)}</strong></span>
+              {savedToast
+                ? <span className="de-saved-toast">{savedToast}</span>
+                : <span>{bulkCount > 0 ? `${bulkCount} ჩანაწერი · ` : ''}სულ: <strong className="expense">{formatCurrency(bulkTotal)}</strong></span>}
             </div>
             <div className="de-form-actions">
-              <button type="button" className="de-btn secondary" onClick={resetForm}>გასუფთავება</button>
-              <button type="button" className="de-btn primary" onClick={handleBulkSubmit}>შენახვა</button>
+              <button type="button" className="de-btn secondary" onClick={resetForm} disabled={bulkCount === 0}>გასუფთავება</button>
+              <button type="button" className="de-btn primary" onClick={handleBulkSubmit} disabled={bulkCount === 0}>შენახვა</button>
             </div>
           </div>
         </div>
@@ -844,6 +896,19 @@ function Transactions() {
       {showAddCategory && (
         <div className="de-modal-overlay" onClick={() => setShowAddCategory(false)}>
           <div className="de-modal" onClick={e => e.stopPropagation()}>
+            {restorableCategories.length > 0 && (
+              <>
+                <h3>არსებული კატეგორიის დაბრუნება</h3>
+                <p className="de-quick-hint">ისტორია შენარჩუნდება — იგივე კატეგორია ბრუნდება სიაში.</p>
+                <div className="de-restore-list">
+                  {restorableCategories.map(c => (
+                    <button key={c.id} type="button" className="de-restore-chip" onClick={() => handleRestoreCategory(c.id)}>
+                      {c.icon} {c.name}{c.archived ? ' (არქივი)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <h3>ახალი კატეგორია</h3>
             <div className="de-modal-form">
               <div className="de-form-group">
