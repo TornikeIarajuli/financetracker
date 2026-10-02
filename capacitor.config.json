@@ -1,0 +1,20 @@
+{
+  "appId": "com.finansebi.app",
+  "appName": "ფინანსები",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#0f172a",
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#0f172a",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f172a"
+    }
+  }
+}

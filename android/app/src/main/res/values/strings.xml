@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Finansebi</string>
+    <string name="title_activity_main">Finansebi</string>
+    <string name="package_name">com.finansebi.app</string>
+    <string name="custom_url_scheme">com.finansebi.app</string>
+</resources>
