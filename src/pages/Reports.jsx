@@ -7,6 +7,7 @@ import {
   getTransactions, getCategories, exportData, importData, formatCurrency,
   syncNow, getSyncStatus, onSyncStatus, getBackupInfo, restoreFromBackup,
   getPreSyncSnapshot, restorePreSyncSnapshot,
+  findDuplicateCategories, mergeCategories, getMergedCategories, unmergeCategory,
 } from '../store/db';
 import { isSupabaseConfigured, isSignedIn, getUserEmail, onAuthChange, signOut } from '../store/supabase';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
@@ -14,6 +15,7 @@ import { ka } from 'date-fns/locale';
 import { inRange } from '../utils/dates';
 import {
   totalsOf, yearsWithData, yearCategoryTotals, stackedCategoryData,
+  savingsCategoryIds, isSavingsCategory, markPartialLast,
   quarterlySummary as buildQuarterlySummary, categoryMonthlyTrend,
 } from '../utils/stats';
 
@@ -37,15 +39,22 @@ function Reports() {
   const [syncStatus, setSyncStatus] = useState(getSyncStatus());
   const [signedIn, setSignedIn] = useState(isSignedIn());
   const [syncMsg, setSyncMsg] = useState('');
+  const [duplicates, setDuplicates] = useState([]);
+  const [mergedCats, setMergedCats] = useState([]);
+  const [pendingMerge, setPendingMerge] = useState(null); // { group } awaiting confirmation
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   async function loadData() {
-    const [trans, cats] = await Promise.all([getTransactions(), getCategories()]);
+    const [trans, cats, dups, merged] = await Promise.all([
+      getTransactions(), getCategories(), findDuplicateCategories(), getMergedCategories(),
+    ]);
     setTransactions(trans);
     setCategories(cats);
+    setDuplicates(dups);
+    setMergedCats(merged);
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     const offStatus = onSyncStatus(setSyncStatus);
     const offAuth = onAuthChange(session => setSignedIn(!!session));
@@ -53,6 +62,7 @@ function Reports() {
   }, []);
 
   const years = yearsWithData(transactions);
+  const savingsIds = savingsCategoryIds(categories);
   const currentYear = new Date().getFullYear();
 
   // ── Overview helpers ──────────────────────────────────────────
@@ -75,8 +85,8 @@ function Reports() {
 
   const monthRow = (date) => {
     const mt = transactions.filter(t => inRange(t, startOfMonth(date), endOfMonth(date)));
-    const { income, expenses } = totalsOf(mt);
-    return { month: format(date, 'LLL', { locale: ka }), income, expenses, savings: income - expenses };
+    const { income, expenses, saved, balance } = totalsOf(mt, savingsIds);
+    return { month: format(date, 'LLL', { locale: ka }), income, expenses, saved, left: balance };
   };
 
   const getMonthlyOverviewData = () => {
@@ -93,6 +103,8 @@ function Reports() {
     transactions.forEach(t => {
       if (t.type !== type || !inRange(t, start, end)) return;
       const cat = categories[type]?.find(c => c.id === t.categoryId);
+      // savings transfers aren't spending — they're shown separately
+      if (type === 'expense' && isSavingsCategory(cat)) return;
       if (!breakdown[t.categoryId]) {
         breakdown[t.categoryId] = { name: cat?.name || 'უცნობი', value: 0, color: cat?.color || '#888' };
       }
@@ -104,9 +116,9 @@ function Reports() {
   const getTotalStats = () => {
     const { start, end, months } = getRange();
     const filtered = transactions.filter(t => inRange(t, start, end));
-    const { income, expenses, balance } = totalsOf(filtered);
+    const { income, expenses, saved, balance } = totalsOf(filtered, savingsIds);
     return {
-      income, expenses, balance,
+      income, expenses, saved, balance,
       transactionCount: filtered.length,
       avgIncome: income / months,
       avgExpenses: expenses / months,
@@ -183,9 +195,34 @@ function Reports() {
     setSyncMsg('');
   };
 
+  const runMerge = async () => {
+    const [target, ...sources] = pendingMerge.group;
+    setMergeBusy(true);
+    try {
+      let moved = 0;
+      for (const src of sources) moved += (await mergeCategories(src.id, target.id)).moved;
+      await loadData();
+      setSyncMsg(`✅ „${target.name}“ გაერთიანდა — გადავიდა ${moved} ჩანაწერი.`);
+    } catch (err) {
+      alert(`გაერთიანება ვერ მოხერხდა: ${err.message}`);
+    } finally {
+      setMergeBusy(false);
+      setPendingMerge(null);
+    }
+  };
+
+  const handleUnmerge = async (cat) => {
+    if (!confirm(`გავაუქმოთ „${cat.name}“-ის გაერთიანება? მისი ჩანაწერები ისევ ცალკე კატეგორიაში დაბრუნდება.`)) return;
+    const { moved } = await unmergeCategory(cat.id);
+    await loadData();
+    setSyncMsg(`↩️ გაერთიანება გაუქმდა — დაბრუნდა ${moved} ჩანაწერი.`);
+  };
+
   // ── Computed values ───────────────────────────────────────────
 
   const monthlyData = getMonthlyOverviewData();
+  const rangeEndsNow = !dateRange.startsWith('year-') || parseInt(dateRange.slice(5), 10) === currentYear;
+  const overviewTrend = markPartialLast(monthlyData, ['income', 'expenses'], rangeEndsNow);
   const expenseBreakdown = getCategoryBreakdown('expense');
   const incomeBreakdown = getCategoryBreakdown('income');
   const stats = getTotalStats();
@@ -193,7 +230,7 @@ function Reports() {
   const trendsYearNum = parseInt(trendsYear, 10);
   const topCats = yearCategoryTotals(transactions, categories, trendsYearNum).slice(0, 7);
   const stackedData = stackedCategoryData(transactions, categories, topCats, trendsYearNum, trendsGrouping);
-  const quarterlySummary = buildQuarterlySummary(transactions, trendsYearNum);
+  const quarterlySummary = buildQuarterlySummary(transactions, trendsYearNum, savingsIds);
   const categoryTrendData = categoryMonthlyTrend(transactions, selectedCategory, trendsYearNum);
   const selectedCatInfo = selectedCategory ? categories.expense?.find(c => c.id === selectedCategory) : null;
   const selectedCatTotal = categoryTrendData.reduce((s, d) => s + d.amount, 0);
@@ -203,7 +240,7 @@ function Reports() {
     { id: 'overview', label: 'მიმოხილვა' },
     { id: 'trends', label: 'ტენდენციები' },
     { id: 'expenses', label: 'ხარჯები' },
-    { id: 'income', label: 'მაქვს' },
+    { id: 'income', label: 'შემოსავალი' },
     { id: 'data', label: 'იმპორტი/ექსპორტი' },
   ];
 
@@ -236,7 +273,7 @@ function Reports() {
         <div className="report-content">
           <div className="stats-summary">
             <div className="stat-box">
-              <span className="stat-label">სულ მაქვს</span>
+              <span className="stat-label">სულ შემოსავალი</span>
               <span className="stat-value income">{formatCurrency(stats.income)}</span>
               <span className="stat-sub">საშ: {formatCurrency(stats.avgIncome)}/თვე</span>
             </div>
@@ -246,6 +283,11 @@ function Reports() {
               <span className="stat-sub">საშ: {formatCurrency(stats.avgExpenses)}/თვე</span>
             </div>
             <div className="stat-box">
+              <span className="stat-label">დანაზოგში</span>
+              <span className="stat-value saved">{formatCurrency(stats.saved)}</span>
+              <span className="stat-sub">ხარჯებში არ ითვლება</span>
+            </div>
+            <div className="stat-box">
               <span className="stat-label">დამრჩა</span>
               <span className={`stat-value ${stats.balance >= 0 ? 'income' : 'expense'}`}>{formatCurrency(stats.balance)}</span>
               <span className="stat-sub">{stats.transactionCount} ტრანზაქცია</span>
@@ -253,31 +295,35 @@ function Reports() {
           </div>
 
           <div className="chart-section">
-            <h3>მაქვს vs ხარჯები</h3>
+            <h3>შემოსავალი vs ხარჯები{rangeEndsNow && <span className="db-partial-note"> · პუნქტირი = მიმდინარე თვე</span>}</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={monthlyData}>
+              <AreaChart data={overviewTrend}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip formatter={(value) => formatCurrency(value)} />
                 <Legend />
-                <Area type="monotone" dataKey="income" stackId="1" stroke="#22c55e" fill="#22c55e40" name="მაქვს" />
-                <Area type="monotone" dataKey="expenses" stackId="2" stroke="#ef4444" fill="#ef444440" name="ხარჯები" />
+                <Area type="monotone" dataKey="income" stroke="#22c55e" fill="#22c55e40" name="შემოსავალი" />
+                <Area type="monotone" dataKey="expenses" stroke="#ef4444" fill="#ef444440" name="ხარჯები" />
+                {rangeEndsNow && <Area type="monotone" dataKey="incomePartial" stroke="#22c55e" strokeDasharray="5 5" fill="none" legendType="none" name="შემოსავალი (მიმდინარე)" />}
+                {rangeEndsNow && <Area type="monotone" dataKey="expensesPartial" stroke="#ef4444" strokeDasharray="5 5" fill="none" legendType="none" name="ხარჯები (მიმდინარე)" />}
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
           <div className="chart-section">
-            <h3>თვიური დანაზოგი</h3>
+            <h3>თვიური დანაზოგი და ნაშთი</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Bar dataKey="savings" name="დანაზოგი" fill="#3b82f6">
+                <Legend />
+                <Bar dataKey="saved" name="დანაზოგში" fill="#8b5cf6" />
+                <Bar dataKey="left" name="დარჩა" fill="#22c55e">
                   {monthlyData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.savings >= 0 ? '#22c55e' : '#ef4444'} />
+                    <Cell key={`cell-${index}`} fill={entry.left >= 0 ? '#22c55e' : '#ef4444'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -337,13 +383,19 @@ function Reports() {
                   <div key={i} className="quarter-card">
                     <div className="quarter-label">{q.label}</div>
                     <div className="quarter-row">
-                      <span className="quarter-stat-name">მაქვს</span>
+                      <span className="quarter-stat-name">შემოსავალი</span>
                       <span className="quarter-stat-value income">{formatCurrency(q.income)}</span>
                     </div>
                     <div className="quarter-row">
                       <span className="quarter-stat-name">ხარჯები</span>
                       <span className="quarter-stat-value expense">{formatCurrency(q.expenses)}</span>
                     </div>
+                    {q.saved > 0 && (
+                      <div className="quarter-row">
+                        <span className="quarter-stat-name">დანაზოგი</span>
+                        <span className="quarter-stat-value saved">{formatCurrency(q.saved)}</span>
+                      </div>
+                    )}
                     <div className="quarter-divider" />
                     <div className="quarter-row">
                       <span className="quarter-stat-name">დამრჩა</span>
@@ -490,7 +542,7 @@ function Reports() {
         <div className="report-content">
           <div className="chart-grid">
             <div className="chart-section">
-              <h3>მაქვს კატეგორიებით</h3>
+              <h3>შემოსავალი კატეგორიებით</h3>
               {incomeBreakdown.length > 0 ? (
                 <div className="donut-chart-container large">
                   <ResponsiveContainer width="100%" height={220}>
@@ -518,12 +570,12 @@ function Reports() {
                   </div>
                 </div>
               ) : (
-                <div className="empty-state">ამ პერიოდში მაქვს არ არის</div>
+                <div className="empty-state">ამ პერიოდში შემოსავალი არ არის</div>
               )}
             </div>
 
             <div className="chart-section">
-              <h3>მაქვსის წყაროები</h3>
+              <h3>შემოსავლის წყაროები</h3>
               <div className="category-list">
                 {incomeBreakdown.map((cat, index) => (
                   <div key={index} className="category-row">
@@ -535,20 +587,20 @@ function Reports() {
                     <span className="category-amount">{formatCurrency(cat.value)}</span>
                   </div>
                 ))}
-                {incomeBreakdown.length === 0 && <div className="empty-state">მაქვს არ არის</div>}
+                {incomeBreakdown.length === 0 && <div className="empty-state">შემოსავალი არ არის</div>}
               </div>
             </div>
           </div>
 
           <div className="chart-section">
-            <h3>თვიური მაქვს</h3>
+            <h3>თვიური შემოსავალი</h3>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="მაქვს" />
+                <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="შემოსავალი" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -600,6 +652,59 @@ function Reports() {
               </details>
             )}
           </div>
+
+          {(duplicates.length > 0 || mergedCats.length > 0) && (
+            <div className="data-section" style={{ borderLeft: '4px solid #f59e0b' }}>
+              <h3>🔀 ერთნაირი სახელის კატეგორიები</h3>
+              {duplicates.length > 0 && (
+                <p>
+                  ეს კატეგორიები ერთნაირად ჰქვია, ამიტომ გრაფიკებში ორჯერ ჩანს. გაერთიანებისას ჩანაწერები
+                  გადავა იმ კატეგორიაში, სადაც მეტი ჩანაწერია. არაფერი წაიშლება და შეგიძლიათ გააუქმოთ.
+                </p>
+              )}
+              {duplicates.map(group => (
+                <div key={group[0].id} className="dup-group">
+                  <div className="dup-items">
+                    {group.map((c, i) => (
+                      <span key={c.id} className={`dup-chip ${i === 0 ? 'keep' : ''}`}>
+                        {c.icon} {c.name} · {c.txCount} ჩანაწერი{i === 0 ? ' (დარჩება)' : ''}
+                      </span>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary" onClick={() => setPendingMerge({ group })}>გაერთიანება</button>
+                </div>
+              ))}
+              {mergedCats.length > 0 && (
+                <div className="dup-merged">
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>გაერთიანებული:</p>
+                  {mergedCats.map(c => (
+                    <div key={c.id} className="dup-group">
+                      <span className="dup-chip">{c.icon} {c.name}</span>
+                      <button className="btn btn-secondary" onClick={() => handleUnmerge(c)}>↩️ გაუქმება</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {pendingMerge && (
+            <div className="de-modal-overlay" onClick={() => !mergeBusy && setPendingMerge(null)}>
+              <div className="de-modal de-confirm" role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+                <h3>🔀 „{pendingMerge.group[0].name}“ — გაერთიანება</h3>
+                <p className="de-confirm-text">
+                  {pendingMerge.group.slice(1).reduce((s, c) => s + c.txCount, 0)} ჩანაწერი გადავა კატეგორიაში
+                  „{pendingMerge.group[0].icon} {pendingMerge.group[0].name}“ ({pendingMerge.group[0].txCount} ჩანაწერი).
+                  ჩანაწერები და თანხები არ შეიცვლება, მხოლოდ კატეგორია. მეორე კატეგორია დაარქივდება (არ წაიშლება).
+                  ყოველთვის შეგიძლიათ გააუქმოთ.
+                </p>
+                <div className="de-modal-actions">
+                  <button className="de-btn secondary" onClick={() => setPendingMerge(null)} disabled={mergeBusy} autoFocus>გაუქმება</button>
+                  <button className="de-btn primary" onClick={runMerge} disabled={mergeBusy}>{mergeBusy ? '⏳ ...' : 'გაერთიანება'}</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="data-section" style={{ borderLeft: '4px solid #22c55e' }}>
             <h3>🛡️ სარეზერვო ასლი (ავტომატური)</h3>

@@ -552,8 +552,8 @@ function Transactions() {
           {format(selectedDay, 'EEEE, d MMMM', { locale: ka })}
         </div>
         <div className="de-summary-bar">
-          <span className="de-sum income">+{formatCurrency(dayTotals.income)}</span>
-          <span className="de-sum expense">-{formatCurrency(dayTotals.expenses)}</span>
+          <span className="de-sum income">{dayTotals.income > 0 ? '+' : ''}{formatCurrency(dayTotals.income)}</span>
+          <span className="de-sum expense">{dayTotals.expenses > 0 ? '−' : ''}{formatCurrency(dayTotals.expenses)}</span>
           <span className={`de-sum balance ${dayTotals.balance >= 0 ? 'positive' : 'negative'}`}>
             ={formatCurrency(dayTotals.balance)}
           </span>

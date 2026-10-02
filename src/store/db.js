@@ -556,6 +556,87 @@ export const resetMonthCategoriesToDefaults = locked(async (year, month) => {
   return true;
 });
 
+// ============================================
+// Duplicate categories (same type + name) and merging
+// ============================================
+
+export const findDuplicateCategories = async () => {
+  await initDB();
+  const [cats, txs] = await Promise.all([getAllFromStore('categories'), getAllFromStore('transactions')]);
+  const counts = {};
+  txs.forEach(t => { counts[t.categoryId] = (counts[t.categoryId] || 0) + 1; });
+  const groups = {};
+  cats.filter(c => !c.archived).forEach(c => {
+    const key = `${c.type}|${(c.name || '').trim()}`;
+    (groups[key] = groups[key] || []).push({ ...c, txCount: counts[c.id] || 0 });
+  });
+  return Object.values(groups)
+    .filter(g => g.length > 1)
+    .map(g => g.sort((a, b) => b.txCount - a.txCount));
+};
+
+// Move everything from `sourceId` onto `targetId`. Transactions are kept and
+// only re-pointed (each remembers `mergedFromCategoryId`, so this can be
+// undone); budgets are copied where the target has none; month lists show the
+// target instead; the source category is archived, never deleted.
+export const mergeCategories = locked(async (sourceId, targetId) => {
+  const [source, target] = await Promise.all([getFromStore('categories', sourceId), getFromStore('categories', targetId)]);
+  if (!source || !target || source.id === target.id) throw new Error('არასწორი კატეგორია');
+  if ((source.type === 'income') !== (target.type === 'income')) throw new Error('სხვადასხვა ტიპის კატეგორიები');
+
+  try {
+    localStorage.setItem('finance_pre_merge_snapshot', JSON.stringify({ ...(await readLocalDataset()), snapshotAt: new Date().toISOString() }));
+  } catch { /* quota — the merge itself is reversible anyway */ }
+
+  const now = new Date().toISOString();
+  const txs = (await getAllFromStore('transactions')).filter(t => t.categoryId === sourceId);
+  const budgets = await getAllFromStore('monthlyBudgets');
+  const targetBudgetIds = new Set(budgets.filter(b => b.categoryId === targetId).map(b => b.id));
+  const newBudgets = budgets
+    .filter(b => b.categoryId === sourceId && !targetBudgetIds.has(`${targetId}_${b.year}_${b.month}`))
+    .map(b => ({ ...b, id: `${targetId}_${b.year}_${b.month}`, categoryId: targetId }));
+  const months = (await getAllFromStore('monthlyCategories')).filter(m =>
+    [...(m.income || []), ...(m.expense || [])].some(c => c.id === sourceId));
+  const fixList = (list) => {
+    if (!list.some(c => c.id === sourceId)) return list;
+    if (list.some(c => c.id === targetId)) return list.filter(c => c.id !== sourceId);
+    return list.map(c => (c.id === sourceId ? { ...target } : c));
+  };
+
+  await runAtomic(['transactions', 'monthlyBudgets', 'monthlyCategories', 'categories'], (s) => {
+    txs.forEach(t => s.transactions.put({ ...t, categoryId: targetId, mergedFromCategoryId: sourceId, updatedAt: now }));
+    newBudgets.forEach(b => s.monthlyBudgets.put(b));
+    months.forEach(m => s.monthlyCategories.put({ ...m, income: fixList(m.income || []), expense: fixList(m.expense || []) }));
+    s.categories.put({ ...source, archived: true, mergedInto: targetId });
+  });
+  afterWrite();
+  return { moved: txs.length, budgets: newBudgets.length, months: months.length };
+});
+
+export const getMergedCategories = async () => {
+  await initDB();
+  return (await getAllFromStore('categories')).filter(c => c.mergedInto);
+};
+
+// Undo a merge: transactions that came from `sourceId` go back to it and the
+// category is restored. (Month lists keep showing the target.)
+export const unmergeCategory = locked(async (sourceId) => {
+  const source = await getFromStore('categories', sourceId);
+  if (!source) return { moved: 0 };
+  const now = new Date().toISOString();
+  const txs = (await getAllFromStore('transactions')).filter(t => t.mergedFromCategoryId === sourceId);
+  await runAtomic(['transactions', 'categories'], (s) => {
+    txs.forEach(t => {
+      const { mergedFromCategoryId: _ignored, ...rest } = t;
+      s.transactions.put({ ...rest, categoryId: sourceId, updatedAt: now });
+    });
+    const { mergedInto: _target, ...restored } = source;
+    s.categories.put({ ...restored, archived: undefined });
+  });
+  afterWrite();
+  return { moved: txs.length };
+});
+
 // Get monthly spending by category
 export const getMonthlySpendingByCategory = async (year, month) => {
   const transactions = await getTransactions();
@@ -724,11 +805,13 @@ export const CURRENCY = {
 };
 
 export const formatCurrency = (amount) => {
+  // Round first so tiny negatives and -0 never render as "-0 ₾".
+  const rounded = Math.round((Number(amount) || 0) * 100) / 100;
   return new Intl.NumberFormat('ka-GE', {
     style: 'decimal',
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(amount) + ' ₾';
+  }).format(rounded === 0 ? 0 : rounded) + ' ₾';
 };
 
 // ============================================

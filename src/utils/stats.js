@@ -12,22 +12,62 @@ const OTHER_CAT = { name: 'სხვა', color: '#94a3b8', icon: '📦' };
 export const QUARTER_LABELS = ['I კვარტალი', 'II კვარტალი', 'III კვარტალი', 'IV კვარტალი'];
 
 const sum = (list) => list.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-
-export const totalsOf = (transactions) => {
-  const income = sum(transactions.filter(t => t.type === 'income'));
-  const expenses = sum(transactions.filter(t => t.type === 'expense'));
-  return { income, expenses, balance: income - expenses };
-};
-
-export const monthlyStats = (transactions, year, month) => {
-  const filtered = transactions.filter(t => inMonth(t, year, month));
-  return { ...totalsOf(filtered), transactions: filtered };
-};
+const NO_IDS = new Set();
 
 export const flatCategories = (categories) => [
   ...(categories?.expense || []),
   ...(categories?.income || []),
 ];
+
+// Money moved into savings is recorded as an expense in a "დანაზოგი"
+// category. It isn't spending, so totals report it separately as `saved`.
+// Detected by name (or an explicit `isSavings` flag) — stored data is untouched.
+export const isSavingsCategory = (cat) =>
+  !!cat && cat.type !== 'income' && (cat.isSavings === true || /დანაზოგ/.test(cat.name || ''));
+
+export const savingsCategoryIds = (categories) =>
+  new Set(flatCategories(categories).filter(isSavingsCategory).map(c => c.id));
+
+// income, expenses (= real spending, savings excluded), saved, and balance
+// (= income − spending − saved, i.e. what's left after both).
+export const totalsOf = (transactions, savingsIds = NO_IDS) => {
+  const income = sum(transactions.filter(t => t.type === 'income'));
+  const outflow = transactions.filter(t => t.type === 'expense');
+  const saved = sum(outflow.filter(t => savingsIds.has(t.categoryId)));
+  const expenses = sum(outflow) - saved;
+  return { income, expenses, saved, balance: income - expenses - saved };
+};
+
+export const monthlyStats = (transactions, year, month, savingsIds = NO_IDS) => {
+  const filtered = transactions.filter(t => inMonth(t, year, month));
+  return { ...totalsOf(filtered, savingsIds), transactions: filtered };
+};
+
+// Same as monthlyStats but only up to (and including) day `day` — used to
+// compare a month in progress with the same days of another month.
+export const monthToDateStats = (transactions, year, month, day, savingsIds = NO_IDS) => {
+  const filtered = transactions.filter(t => {
+    const d = parseDate(t.date);
+    return !!d && d.getFullYear() === year && d.getMonth() === month && d.getDate() <= day;
+  });
+  return { ...totalsOf(filtered, savingsIds), transactions: filtered };
+};
+
+// For trend lines whose last point is a month still in progress: moves the
+// last value into `${key}Partial` (and repeats the previous value there so the
+// dashed segment connects), letting charts draw that stretch dashed.
+export const markPartialLast = (rows, keys, isPartial) => {
+  if (!isPartial || rows.length < 2) return rows;
+  const last = rows.length - 1;
+  return rows.map((r, i) => {
+    const out = { ...r };
+    keys.forEach(k => {
+      out[`${k}Partial`] = i >= last - 1 ? r[k] : null;
+      if (i === last) out[k] = null;
+    });
+    return out;
+  });
+};
 
 // Years that have at least one transaction, plus the current year, newest first.
 export const yearsWithData = (transactions) => {
@@ -47,7 +87,7 @@ export const spendingByCategory = (transactions, categories) => {
   const byId = new Map(flatCategories(categories).map(c => [c.id, c]));
   const map = {};
   transactions.forEach(t => {
-    if (t.type !== 'expense') return;
+    if (t.type !== 'expense' || isSavingsCategory(byId.get(t.categoryId))) return;
     const cat = byId.get(t.categoryId);
     const key = cat ? t.categoryId : OTHER_CAT_KEY;
     if (!map[key]) {
@@ -97,13 +137,13 @@ export const stackedCategoryData = (transactions, categories, cats, year, groupi
   });
 };
 
-export const quarterlySummary = (transactions, year) => {
+export const quarterlySummary = (transactions, year, savingsIds = NO_IDS) => {
   const now = new Date();
   return [1, 2, 3, 4].map((q, i) => {
     const start = new Date(year, (q - 1) * 3, 1);
     if (start > now) return null;
     const end = endOfMonth(new Date(year, q * 3 - 1, 1));
-    return { label: QUARTER_LABELS[i], ...totalsOf(transactions.filter(t => inRange(t, start, end))) };
+    return { label: QUARTER_LABELS[i], ...totalsOf(transactions.filter(t => inRange(t, start, end)), savingsIds) };
   }).filter(Boolean);
 };
 

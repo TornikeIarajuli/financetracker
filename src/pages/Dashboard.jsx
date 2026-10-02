@@ -15,8 +15,9 @@ import { ka } from 'date-fns/locale';
 import { parseDate } from '../utils/dates';
 import { formatGoalAmount, summarizeGoals, formatTotals, currencyOf } from '../utils/currency';
 import {
-  monthlyStats, spendingByCategory, yearCategoryTotals, stackedCategoryData,
+  monthlyStats, monthToDateStats, spendingByCategory, yearCategoryTotals, stackedCategoryData,
   quarterlySummary as buildQuarterlySummary, categoryMonthlyTrend, yearsWithData,
+  savingsCategoryIds, markPartialLast,
 } from '../utils/stats';
 
 function Dashboard() {
@@ -98,19 +99,25 @@ function Dashboard() {
   }, [currentMonth, isLoading]);
 
   // ── Derived data (all computed in memory from one transactions read) ──
+  const savingsIds = useMemo(() => savingsCategoryIds(categoriesData), [categoriesData]);
+  // The viewed month is still in progress: compare it with the same days of
+  // last month, not with last month's full total.
+  const isCurrentMonth = isSameMonth(currentMonth, new Date());
   const stats = useMemo(
-    () => monthlyStats(allTransactions, currentMonth.getFullYear(), currentMonth.getMonth()),
-    [allTransactions, currentMonth]
+    () => monthlyStats(allTransactions, currentMonth.getFullYear(), currentMonth.getMonth(), savingsIds),
+    [allTransactions, currentMonth, savingsIds]
   );
   const prevMonthStats = useMemo(() => {
     const prev = subMonths(currentMonth, 1);
-    return monthlyStats(allTransactions, prev.getFullYear(), prev.getMonth());
-  }, [allTransactions, currentMonth]);
-  const monthlyData = useMemo(() => Array.from({ length: 6 }, (_, i) => {
+    return isCurrentMonth
+      ? monthToDateStats(allTransactions, prev.getFullYear(), prev.getMonth(), new Date().getDate(), savingsIds)
+      : monthlyStats(allTransactions, prev.getFullYear(), prev.getMonth(), savingsIds);
+  }, [allTransactions, currentMonth, savingsIds, isCurrentMonth]);
+  const monthlyData = useMemo(() => markPartialLast(Array.from({ length: 6 }, (_, i) => {
     const d = subMonths(currentMonth, 5 - i);
-    const s = monthlyStats(allTransactions, d.getFullYear(), d.getMonth());
+    const s = monthlyStats(allTransactions, d.getFullYear(), d.getMonth(), savingsIds);
     return { month: format(d, 'MMM', { locale: ka }), income: s.income, expenses: s.expenses };
-  }), [allTransactions, currentMonth]);
+  }), ['income', 'expenses'], isCurrentMonth), [allTransactions, currentMonth, savingsIds, isCurrentMonth]);
   const categoryData = useMemo(
     () => spendingByCategory(stats.transactions, categoriesData),
     [stats, categoriesData]
@@ -155,18 +162,27 @@ function Dashboard() {
   const incomePct = getChangePct(stats.income, prevMonthStats.income);
   const expensesPct = getChangePct(stats.expenses, prevMonthStats.expenses);
   const spendRatio = stats.income > 0 ? Math.round((stats.expenses / stats.income) * 100) : 0;
+  const comparedTo = isCurrentMonth ? `წინა თვის 1–${new Date().getDate()} რიცხვთან` : 'წინა თვესთან';
   const catTotal = categoryData.reduce((s, c) => s + c.value, 0); // used by spending bars
 
   const today = new Date();
   const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
   const daysLeft = isSameMonth(currentMonth, today) ? Math.max(daysInMonth - today.getDate() + 1, 1) : 0;
-  const dailyBudget = daysLeft > 0 && stats.balance > 0 ? stats.balance / daysLeft : null;
+  // Daily limit comes from what's left of this month's spending budget
+  // (savings budgets excluded); without budgets, from the remaining balance.
+  const spendingBudget = Object.entries(monthlyBudgets)
+    .filter(([id]) => !savingsIds.has(id))
+    .reduce((s, [, v]) => s + (v || 0), 0);
+  const budgetLeft = spendingBudget - stats.expenses;
+  const dailyBudget = daysLeft === 0 ? null
+    : spendingBudget > 0 ? (budgetLeft > 0 ? budgetLeft / daysLeft : null)
+    : (stats.balance > 0 ? stats.balance / daysLeft : null);
 
   // Trends computed values
   const trendsYearNum = parseInt(trendsYear, 10);
   const topCats = yearCategoryTotals(allTransactions, categoriesData, trendsYearNum);
   const stackedData = stackedCategoryData(allTransactions, categoriesData, topCats, trendsYearNum, trendsGrouping);
-  const quarterlySummary = buildQuarterlySummary(allTransactions, trendsYearNum);
+  const quarterlySummary = buildQuarterlySummary(allTransactions, trendsYearNum, savingsIds);
   const categoryTrendData = categoryMonthlyTrend(allTransactions, selectedCategory, trendsYearNum);
   const selectedCatInfo = selectedCategory ? [...(categoriesData.expense || [])].find(c => c.id === selectedCategory) : null;
   const selectedCatTotal = categoryTrendData.reduce((s, d) => s + d.amount, 0);
@@ -195,7 +211,7 @@ function Dashboard() {
             <span className="db-stat-value">{formatCurrency(stats.income)}</span>
             {incomePct !== null && (
               <span className={`db-stat-change ${Number(incomePct) >= 0 ? 'pos' : 'neg'}`}>
-                {Number(incomePct) >= 0 ? '↑' : '↓'} {Math.abs(incomePct)}% წინა თვის
+                {Number(incomePct) >= 0 ? '↑' : '↓'} {Math.abs(incomePct)}% {comparedTo}
               </span>
             )}
           </div>
@@ -208,8 +224,11 @@ function Dashboard() {
             <span className="db-stat-value">{formatCurrency(stats.expenses)}</span>
             {expensesPct !== null && (
               <span className={`db-stat-change ${Number(expensesPct) <= 0 ? 'pos' : 'neg'}`}>
-                {Number(expensesPct) >= 0 ? '↑' : '↓'} {Math.abs(expensesPct)}% წინა თვის
+                {Number(expensesPct) >= 0 ? '↑' : '↓'} {Math.abs(expensesPct)}% {comparedTo}
               </span>
+            )}
+            {stats.saved > 0 && (
+              <span className="db-stat-sub">+ {formatCurrency(stats.saved)} დანაზოგში</span>
             )}
           </div>
         </div>
@@ -221,7 +240,9 @@ function Dashboard() {
             <span className={`db-stat-value ${stats.balance >= 0 ? 'positive' : 'negative'}`}>
               {formatCurrency(stats.balance)}
             </span>
-            <span className="db-stat-sub">{spendRatio}% დახარჯული</span>
+            <span className="db-stat-sub">
+              {stats.income > 0 ? `${spendRatio}% დახარჯული` : 'შემოსავალი ჯერ არ არის'}
+            </span>
           </div>
         </div>
 
@@ -232,11 +253,11 @@ function Dashboard() {
             {dailyBudget !== null ? (
               <>
                 <span className="db-stat-value positive">{formatCurrency(Math.floor(dailyBudget))}</span>
-                <span className="db-stat-sub">{daysLeft} დღე დარჩა</span>
+                <span className="db-stat-sub">{daysLeft} დღე დარჩა{spendingBudget > 0 ? ' · ბიუჯეტიდან' : ''}</span>
               </>
             ) : (
               <span className="db-stat-value" style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                {daysLeft === 0 ? 'თვე გავიდა' : 'ბალანსი 0'}
+                {daysLeft === 0 ? 'თვე გავიდა' : spendingBudget > 0 ? 'ბიუჯეტი ამოწურულია' : 'ბალანსი 0'}
               </span>
             )}
           </div>
@@ -272,7 +293,7 @@ function Dashboard() {
       {/* Row 1: 6-month trend (full width) */}
       <div className="db-card">
         <div className="db-card-header">
-          <h3>6-თვიანი ტრენდი</h3>
+          <h3>6-თვიანი ტრენდი{isCurrentMonth && <span className="db-partial-note"> · პუნქტირი = მიმდინარე თვე</span>}</h3>
           <div className="db-legend-row">
             <span className="db-legend-item"><span className="db-dot" style={{ background: '#22c55e' }} /> შემოსავალი</span>
             <span className="db-legend-item"><span className="db-dot" style={{ background: '#ef4444' }} /> ხარჯები</span>
@@ -296,6 +317,12 @@ function Dashboard() {
             <Tooltip formatter={value => formatCurrency(value)} />
             <Area type="monotone" dataKey="income" stroke="#22c55e" fill="url(#incomeGrad)" strokeWidth={2} name="შემოსავალი" dot={false} />
             <Area type="monotone" dataKey="expenses" stroke="#ef4444" fill="url(#expGrad)" strokeWidth={2} name="ხარჯები" dot={false} />
+            {isCurrentMonth && (
+              <>
+                <Area type="monotone" dataKey="incomePartial" stroke="#22c55e" strokeDasharray="5 5" fill="none" strokeWidth={2} name="შემოსავალი (მიმდინარე)" dot={false} legendType="none" />
+                <Area type="monotone" dataKey="expensesPartial" stroke="#ef4444" strokeDasharray="5 5" fill="none" strokeWidth={2} name="ხარჯები (მიმდინარე)" dot={false} legendType="none" />
+              </>
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -361,13 +388,19 @@ function Dashboard() {
                 <div key={i} className="quarter-card">
                   <div className="quarter-label">{q.label}</div>
                   <div className="quarter-row">
-                    <span className="quarter-stat-name">მაქვს</span>
+                    <span className="quarter-stat-name">შემოსავალი</span>
                     <span className="quarter-stat-value income">{formatCurrency(q.income)}</span>
                   </div>
                   <div className="quarter-row">
                     <span className="quarter-stat-name">ხარჯები</span>
                     <span className="quarter-stat-value expense">{formatCurrency(q.expenses)}</span>
                   </div>
+                  {q.saved > 0 && (
+                    <div className="quarter-row">
+                      <span className="quarter-stat-name">დანაზოგი</span>
+                      <span className="quarter-stat-value saved">{formatCurrency(q.saved)}</span>
+                    </div>
+                  )}
                   <div className="quarter-divider" />
                   <div className="quarter-row">
                     <span className="quarter-stat-name">დამრჩა</span>

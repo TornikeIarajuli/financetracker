@@ -17,6 +17,10 @@ Personal finance tracker app in Georgian (React + Vite).
 - `src/store/supabase.js` — Supabase client, email/password auth, row read/write
 - `src/utils/dates.js` — always use `parseDate`/`formatDate`/`inMonth` for `yyyy-MM-dd` strings (never `new Date(t.date)`)
 - `src/utils/stats.js` — chart/aggregate helpers shared by Dashboard and Reports
+  - Savings: expense categories named "დანაზოგ…" (or `isSavings`) are reported as `saved`, not `expenses`; `balance` = income − expenses − saved. Pass `savingsCategoryIds(categories)` to `totalsOf`/`monthlyStats`
+  - Current month is compared with the same days of last month (`monthToDateStats`) and drawn dashed in trends (`markPartialLast`)
+  - Income is always called "შემოსავალი" in the UI (not "მაქვს")
+- Duplicate categories (same type + name) can be merged in Reports → იმპორტი/ექსპორტი; `mergeCategories` re-points transactions (keeps `mergedFromCategoryId`, undo via `unmergeCategory`) and archives the source
 - `supabase/rls.sql` — row-level-security policy (run after both apps are signed in)
 - `dist/` — built output, rebuild with `npm run build`
 
